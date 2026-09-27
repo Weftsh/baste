@@ -1,6 +1,8 @@
 # Baste
 
 [![CI](https://github.com/weftsh/baste/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/weftsh/baste/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/@weftsh/baste.svg)](https://www.npmjs.com/package/@weftsh/baste)
+[![Release](https://img.shields.io/github/v/release/weftsh/baste.svg)](https://github.com/weftsh/baste/releases/latest)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Website](https://img.shields.io/badge/website-weftsh.github.io%2Fbaste-10b981.svg)](https://weftsh.github.io/baste/)
 
@@ -40,16 +42,16 @@ You need macOS 14+ on Apple Silicon, Linux with KVM, or Windows 11 with WSL2, pl
 **1. Install Baste**
 
 ```sh
+npm install -g @weftsh/baste
+```
+
+Or, without Node.js, with the install script, which verifies the download's checksum and puts the binary in `~/.local/bin`:
+
+```sh
 curl -fsSL https://raw.githubusercontent.com/weftsh/baste/main/install.sh | sh
 ```
 
-This puts a single binary in `~/.local/bin` (the installer tells you if that isn't on your `PATH`). On macOS it also installs the Linux agent that runs inside the VMs.
-
-Or with npm, which installs the same binary for your platform:
-
-```sh
-npm install -g @weftsh/baste
-```
+Either way you get one native binary for your platform (on macOS, plus the Linux agent that runs inside the VMs). Binaries for every platform are also on the [releases page](https://github.com/weftsh/baste/releases/latest).
 
 **2. Set up your machine's VM backend (once)**
 
@@ -167,7 +169,7 @@ baste secrets set SENTRY_DSN --global  # for every repository
 
 A job that references a secret you haven't set fails before any step runs, with a message naming the secret. Values are masked in logs. On headless machines without a keychain, you can opt in to a private `0600` file with `BASTE_SECRETS_FILE=~/.config/baste/secrets.json`.
 
-`GITHUB_TOKEN` (and `github.token`) in local runs is your gh CLI token. It usually has broader scopes than GitHub's per-job token and doesn't expire with the job, so any action in the run can use it. Baste masks it in logs and warns about it at `init`. A scoped, short-lived token arrives with the phase 2 GitHub App.
+`GITHUB_TOKEN` (and `github.token`) in local runs is your gh CLI token. It usually has broader scopes than GitHub's per-job token and doesn't expire with the job, so any action in the run can use it. Baste masks it in logs and warns about it at `init`.
 
 ## What runs locally
 
@@ -206,7 +208,7 @@ A job that references a secret you haven't set fails before any step runs, with 
 
 ## Security model
 
-v1 is **trust-based**, like gh-signoff: a developer could post a green status without a real run. It's built for small, trusted teams, not for separation-of-duties controls. Signed attestation of each run is planned for phase 2. Everything stays on the developer's machine: logs, run records (`.git/baste/`) and secrets. Every run records its provenance, meaning where it ran, the backend, the image digest, and the routing policy.
+Baste is **trust-based**, like gh-signoff: a developer could post a green status without a real run. It's built for small, trusted teams, not for separation-of-duties controls. Everything stays on the developer's machine: logs, run records (`.git/baste/`) and secrets. Every run records its provenance, meaning where it ran, the backend, the image digest, and the routing policy.
 
 ## Architecture
 
@@ -221,7 +223,7 @@ gate/              the opt-in gate action
 site/              the website (Tailwind, GitHub Pages), including the page status links point to
 ```
 
-The agent speaks one **runner protocol**, the same one a cloud runner will speak later, so there are no local-only code paths. **Routing is a policy** ("the pusher's machine runs the push") kept apart from the agent. See [docs/architecture.md](docs/architecture.md).
+Every backend drives the same agent through one **runner protocol** (a job spec in, a stream of events out), so there are no backend-specific code paths. **Routing is a policy** ("the pusher's machine runs the push") kept apart from the agent. See [docs/architecture.md](docs/architecture.md).
 
 ## Development
 
@@ -243,13 +245,15 @@ cd site && npm ci && npm run build && npm run check   # `npm run dev` rebuilds o
 
 CI runs all of these, including the Firecracker run on KVM-enabled GitHub runners. The `host` backend (`--backend host`) runs jobs directly on your machine with no VM. It's useful for working on Baste, but offers no isolation or fidelity guarantees.
 
+## Releasing
+
+Releases are one click: **Actions → Release → Run workflow**, then pick patch, minor or major. It bumps the version, builds the Linux and macOS binaries, publishes the GitHub release and the npm packages, and moves the gate action's `v1` tag. See [CONTRIBUTING.md](CONTRIBUTING.md#releasing).
+
 ## Roadmap
 
-- **Phase 1 (this release):** local hook, pinned VMs, statuses posted with the developer's own token, no infrastructure.
-- **Fast follow:** service containers, `actions/cache` mapped to a local cache, cache hit rate and flaky-test insights.
-- **Phase 2:** a GitHub App and router; agents holding an outbound connection for events that don't start locally; signed attestation.
-- **Phase 3:** cloud runners speaking the same runner protocol; provenance on checks ("`main` requires cloud").
-- **Phase 4:** team runner pools over Tailscale; a BYOC router.
+- Service containers (`services:`) inside the VM, so jobs that need Postgres or Redis run locally too
+- `actions/cache` backed by a local cache
+- A GitHub App with signed attestation of each run, for teams that need more than trust-based checks
 
 ## License
 

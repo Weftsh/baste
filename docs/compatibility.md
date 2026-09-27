@@ -22,7 +22,7 @@ If a workflow triggers on both `push` and `pull_request` for the same push, it r
 | `if:` with `success()`, `failure()`, `always()`, `cancelled()` | Supported |
 | `strategy.matrix` with `include`/`exclude`, `fail-fast`, `max-parallel` | Supported, including matrices built from `fromJSON(needs...)` |
 | `outputs:`, `env:`, `defaults.run`, `timeout-minutes`, `continue-on-error` | Supported |
-| `services:` | Handed to GitHub (fast-follow) |
+| `services:` | Handed to GitHub |
 | `container:` | Handed to GitHub |
 | `environment:` | Handed to GitHub (deployments stay on GitHub) |
 | `permissions: id-token: write` (OIDC) | Handed to GitHub |
@@ -57,7 +57,7 @@ These actions talk to GitHub services a local run can't reach, so Baste handles 
 | `actions/checkout` | Checks out the pushed commit (or the PR test merge) from packs Baste builds from your local repository, honouring `path`, `fetch-depth`, `clean`, `persist-credentials`, `submodules`, `lfs`. It works before the push has reached GitHub. Other repositories, other refs, `sparse-checkout`, `filter` or `ssh-key` use the real action. |
 | `actions/upload-artifact` | Stores the artifact with the run (`path` globs and `!` excludes, `if-no-files-found`, `include-hidden-files`). |
 | `actions/download-artifact` | Restores artifacts uploaded earlier in the same run (`name`, `pattern`, `merge-multiple`, `path`). |
-| `actions/cache` | Runs as-is; without a cache service it warns and continues (a local cache is a fast-follow). |
+| `actions/cache` | Runs as-is; without GitHub's cache service it warns and the job continues without a cache. |
 
 ## The environment
 

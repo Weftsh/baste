@@ -1,6 +1,6 @@
 # Architecture
 
-Baste v1 is a single binary with no service behind it. Your machine runs the jobs, and GitHub only ever sees commit statuses. The design keeps later phases (a GitHub App router and cloud runners) additive rather than a rewrite.
+Baste is a single binary with no service behind it. Your machine runs the jobs, and GitHub only ever sees commit statuses.
 
 ## The flow of a push
 
@@ -68,7 +68,7 @@ The protocol doesn't depend on the transport:
 - Tart reads `tart exec`'s stdout
 - Firecracker reads a vsock stream
 
-A cloud runner will speak the same protocol over the network.
+The protocol doesn't depend on the transport, so a runner elsewhere could speak it over the network.
 
 ## Run store
 
@@ -156,9 +156,9 @@ Docker defaults to `linux/amd64` so images match GitHub's x86_64 runners.
 
 Runs the agent as a local process with no VM. The end-to-end tests use it, together with a fake GitHub API.
 
-## Forward compatibility
+## Design choices
 
-- **One runner protocol.** The local agent's interface is the one cloud runners will speak. There are no local-only code paths.
-- **Routing as policy.** `routing.rs` holds phase 1's single rule, "the pusher's machine runs the push", separate from the agent and the scheduler.
+- **One runner protocol.** Every backend drives the same agent through the same protocol. There are no backend-specific code paths in the agent.
+- **Routing as policy.** `routing.rs` holds the routing rule, "the pusher's machine runs the push", separate from the agent and the scheduler.
 - **Provenance in the data.** Each run records where it executed: executor, host, backend, image digest, Baste version and policy. A rule like "`main` requires cloud" is then a policy change, not a migration.
 - **Our own statuses, not self-hosted runners.** Workflows stay unmodified, and routing stays ours.

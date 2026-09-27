@@ -1,32 +1,89 @@
 name: Release
 
+# To ship an update: Actions tab → Release → Run workflow, and pick patch,
+# minor or major. The run bumps the version on main, builds the Linux and
+# macOS binaries, publishes the GitHub release (which creates the tag),
+# points the gate action's major tag at it, and publishes to npm.
+#
+# Pushing a vX.Y.Z tag that matches the version in Cargo.toml releases that
+# commit the same way, without the version bump or the gate tag.
 on:
   push:
     # Version tags only: v0.1.0, v0.2.0-rc.1. The gate action's major tag
     # (v1) is not a release.
     tags: ["v[0-9]+.[0-9]+.[0-9]+*"]
-  # Or release from the Actions tab: the release creates its tag on the
-  # commit the workflow runs on.
   workflow_dispatch:
     inputs:
-      tag:
-        description: Version tag to create and release, e.g. v0.1.0 (must match Cargo.toml)
-        required: true
+      bump:
+        description: Which part of the version to bump
+        type: choice
+        options: [patch, minor, major]
+        default: patch
       gate_tag:
-        description: Major tag of the gate action to point at this commit (leave empty to keep it)
+        description: Major tag of the gate action to point at this release (leave empty to keep it)
         default: v1
 
 permissions:
   contents: write
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
 env:
   CARGO_TERM_COLOR: always
-  TAG: ${{ inputs.tag || github.ref_name }}
 
 jobs:
+  version:
+    name: Version
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      sha: ${{ steps.version.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+        run: |
+          current=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="baste") | .version')
+          if [ "$GITHUB_EVENT_NAME" = push ]; then
+            test "v$current" = "$GITHUB_REF_NAME" || { echo "Tag $GITHUB_REF_NAME doesn't match the version in Cargo.toml ($current)"; exit 1; }
+            echo "tag=$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+            echo "sha=$GITHUB_SHA" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          test "$GITHUB_REF" = refs/heads/main || { echo "Run releases from main"; exit 1; }
+          IFS=. read -r major minor patch <<< "${current%%-*}"
+          case "$BUMP" in
+            major) next="$((major + 1)).0.0" ;;
+            minor) next="$major.$((minor + 1)).0" ;;
+            *) next="$major.$minor.$((patch + 1))" ;;
+          esac
+          if git ls-remote --exit-code --tags origin "refs/tags/v$next" >/dev/null; then
+            echo "v$next already exists"
+            exit 1
+          fi
+          # The first `version =` in the root Cargo.toml is [workspace.package]'s.
+          sed -i -E "0,/^version = \"[^\"]+\"/s//version = \"$next\"/" Cargo.toml
+          cargo update --workspace
+          built=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="baste") | .version')
+          test "$built" = "$next" || { echo "Cargo.toml now says $built, expected $next"; exit 1; }
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Release v$next"
+          git push origin HEAD:main
+          echo "tag=v$next" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "Releasing v$next (was $current)"
+
   linux:
     name: Build ${{ matrix.target }}
+    needs: version
     runs-on: ${{ matrix.runner }}
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
     strategy:
       matrix:
         include:
@@ -36,6 +93,8 @@ jobs:
             runner: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.sha }}
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
@@ -52,7 +111,6 @@ jobs:
           echo "AR_$t=ar" >> "$GITHUB_ENV"
       - name: Check the tag matches the version
         run: |
-          echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+' || { echo "$TAG is not a version tag"; exit 1; }
           version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="baste") | .version')
           test "v$version" = "$TAG" || { echo "tag $TAG != v$version"; exit 1; }
       - run: cargo build --release --target ${{ matrix.target }} -p baste
@@ -73,10 +131,14 @@ jobs:
 
   macos:
     name: Build aarch64-apple-darwin
-    needs: linux
+    needs: [version, linux]
     runs-on: macos-14
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.version.outputs.sha }}
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - run: cargo build --release -p baste
@@ -97,11 +159,19 @@ jobs:
           path: dist
 
   publish:
-    needs: [linux, macos]
+    name: GitHub release
+    needs: [version, linux, macos]
     runs-on: ubuntu-latest
+    # Publishing stays on GitHub; a local Baste run of this workflow only builds.
+    environment: release
+    env:
+      TAG: ${{ needs.version.outputs.tag }}
+      SHA: ${{ needs.version.outputs.sha }}
     steps:
       - uses: actions/checkout@v5
         if: inputs.gate_tag != ''
+        with:
+          ref: ${{ needs.version.outputs.sha }}
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -110,21 +180,21 @@ jobs:
       - name: Create the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$TAG" artifacts/* --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --generate-notes
+        run: gh release create "$TAG" artifacts/* --repo "$GITHUB_REPOSITORY" --target "$SHA" --generate-notes
       - name: Point the gate action's major tag at this release
         if: inputs.gate_tag != ''
         env:
           GATE_TAG: ${{ inputs.gate_tag }}
         run: |
-          git tag -f "$GATE_TAG" "$GITHUB_SHA"
+          git tag -f "$GATE_TAG" "$SHA"
           git push -f origin "refs/tags/$GATE_TAG"
 
   npm:
-    needs: publish
+    needs: [version, publish]
     permissions:
       contents: read
       id-token: write
     uses: ./.github/workflows/npm.yml
     with:
-      tag: ${{ inputs.tag || github.ref_name }}
+      tag: ${{ needs.version.outputs.tag }}
     secrets: inherit

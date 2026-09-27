@@ -82,10 +82,10 @@ pub fn unsupported_reason(wf: &Workflow, job: &Job) -> Option<String> {
         return Some("calls a reusable workflow".into());
     }
     if job.services.is_some() {
-        return Some("uses service containers (not yet supported locally)".into());
+        return Some("uses service containers, which run on GitHub".into());
     }
     if job.container.is_some() {
-        return Some("runs in a job container (not yet supported locally)".into());
+        return Some("runs in a job container, which runs on GitHub".into());
     }
     if job.environment.is_some() {
         return Some("deploys to an environment".into());
