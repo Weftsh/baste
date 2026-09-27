@@ -41,6 +41,10 @@ fn release_and_pages_workflows() {
     assert!(!wf.on.matches_push("refs/heads/main", None).unwrap());
     let p = placements(&wf);
     assert_eq!(p.iter().filter(|(_, local)| *local).count(), 3, "{p:?}");
+    // Publishing to npm is only called or dispatched, never started by a push.
+    let npm = load(".github/workflows/npm.yml");
+    assert!(!npm.on.matches_push("refs/heads/main", None).unwrap());
+    assert!(!npm.on.matches_push("refs/tags/v0.1.0", None).unwrap());
     let pages = placements(&load(".github/workflows/pages.yml"));
     // The site builds locally; the deployment uses an environment, so it
     // stays on GitHub.

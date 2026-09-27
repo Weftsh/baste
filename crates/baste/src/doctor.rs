@@ -267,6 +267,18 @@ pub fn run_checks(git: Option<&Git>, config: &Config, backend_override: Option<&
     }
 }
 
+/// The hook records this binary's path. When that path is in npx's cache,
+/// which npm may clear, say how to install Baste for good. (The hook falls
+/// back to `baste` on `PATH`, so a later global install keeps it working.)
+fn transient_install_note(exe: &std::path::Path) -> Option<String> {
+    let path = exe.to_string_lossy();
+    path.contains("/_npx/").then(|| {
+        "You ran Baste through npx, so the hook points into npm's cache, which npm may clear. \
+         Install it for good with `npm install -g @weftsh/baste`."
+            .to_string()
+    })
+}
+
 /// `baste init`: check everything, change nothing on failure, else install.
 pub fn init(git: Option<&Git>, backend_override: Option<&str>) -> Result<bool> {
     let mut config = Config::load()?;
@@ -297,6 +309,12 @@ pub fn init(git: Option<&Git>, backend_override: Option<&str>) -> Result<bool> {
         crate::hook::Installed::Updated => println!("{} Updated the pre-push hook.", green("✓")),
         crate::hook::Installed::Fresh => println!("{} Installed the pre-push hook.", green("✓")),
     }
+    if let Some(note) = std::env::current_exe()
+        .ok()
+        .and_then(|p| transient_install_note(&p))
+    {
+        println!("{} {note}", yellow("!"));
+    }
     println!(
         "\nNext: push a commit. The push returns immediately and the run starts in the background."
     );
@@ -317,4 +335,18 @@ pub fn init(git: Option<&Git>, backend_override: Option<&str>) -> Result<bool> {
         }
     }
     Ok(true)
+}
+
+#[cfg(test)]
+mod npx_tests {
+    #[test]
+    fn npx_cache_install_gets_a_note() {
+        use std::path::Path;
+        let npx =
+            Path::new("/home/u/.npm/_npx/1a2b/node_modules/@weftsh/baste-linux-x64/bin/baste");
+        assert!(super::transient_install_note(npx).is_some());
+        let global = Path::new("/usr/local/lib/node_modules/@weftsh/baste-linux-x64/bin/baste");
+        assert!(super::transient_install_note(global).is_none());
+        assert!(super::transient_install_note(Path::new("/home/u/.local/bin/baste")).is_none());
+    }
 }

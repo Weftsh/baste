@@ -1,0 +1,58 @@
+name: npm
+
+# Publishes a GitHub release's binaries to npm as @weftsh/baste plus one
+# package per platform. The Release workflow calls this after publishing;
+# run it by hand to (re)publish an existing release. Versions already on
+# npm are skipped, so re-running is safe.
+on:
+  workflow_call:
+    inputs:
+      tag:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Released version tag to publish, e.g. v0.1.0
+        required: true
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+      - name: Download the release binaries
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir release --pattern '*.tar.gz' --pattern SHA256SUMS
+          cd release && sha256sum -c SHA256SUMS
+      - name: Build the packages
+        run: node npm/build.mjs "$TAG" release dist | tee order.txt
+      - name: Publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          test -n "$NODE_AUTH_TOKEN" || { echo "The NPM_TOKEN secret isn't available to this repository"; exit 1; }
+          # Pre-releases (v0.2.0-rc.1) go to the "next" dist-tag, not "latest".
+          dist_tag=latest
+          case "$TAG" in *-*) dist_tag=next ;; esac
+          while read -r dir; do
+            name=$(node -p "require('./$dir/package.json').name")
+            version=$(node -p "require('./$dir/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is already on npm"
+              continue
+            fi
+            (cd "$dir" && npm publish --provenance --access public --tag "$dist_tag")
+          done < order.txt

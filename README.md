@@ -45,6 +45,12 @@ curl -fsSL https://raw.githubusercontent.com/weftsh/baste/main/install.sh | sh
 
 This puts a single binary in `~/.local/bin` (the installer tells you if that isn't on your `PATH`). On macOS it also installs the Linux agent that runs inside the VMs.
 
+Or with npm, which installs the same binary for your platform:
+
+```sh
+npm install -g @weftsh/baste
+```
+
 **2. Set up your machine's VM backend (once)**
 
 | Host | Backend | Setup |

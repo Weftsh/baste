@@ -113,3 +113,6 @@ jobs:
       - run: npm ci
       - run: npm run build
       - run: npm run check
+      - name: npm packaging scripts parse
+        working-directory: .
+        run: node --check npm/baste/bin/baste.js && node --check npm/build.mjs

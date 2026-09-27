@@ -118,3 +118,13 @@ jobs:
         run: |
           git tag -f "$GATE_TAG" "$GITHUB_SHA"
           git push -f origin "refs/tags/$GATE_TAG"
+
+  npm:
+    needs: publish
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/npm.yml
+    with:
+      tag: ${{ inputs.tag || github.ref_name }}
+    secrets: inherit

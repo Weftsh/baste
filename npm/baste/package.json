@@ -1,0 +1,34 @@
+{
+  "name": "@weftsh/baste",
+  "version": "0.0.0-dev",
+  "description": "Run your GitHub Actions workflows locally in a fresh VM on every git push, and post the result to GitHub as a check you can require.",
+  "keywords": [
+    "github-actions",
+    "ci",
+    "continuous-integration",
+    "local-ci",
+    "git-hooks",
+    "pre-push",
+    "firecracker",
+    "tart",
+    "cli"
+  ],
+  "homepage": "https://weftsh.github.io/baste/",
+  "bugs": "https://github.com/Weftsh/baste/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Weftsh/baste.git",
+    "directory": "npm/baste"
+  },
+  "license": "Apache-2.0",
+  "bin": {
+    "baste": "bin/baste.js"
+  },
+  "files": [
+    "bin/"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "optionalDependencies": {}
+}
