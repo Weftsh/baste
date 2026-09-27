@@ -77,7 +77,7 @@ pub fn gather_facts(run: &mut Run, git: &Git, api: Option<&GitHub>) -> RunFacts 
             }
             Err(e) => run
                 .notes
-                .push(format!("Couldn't read repository details: {e}")),
+                .push(format!("Couldn't read repository details: {e:#}")),
         }
         match api.variables() {
             Ok(v) => facts.vars = v,
@@ -169,7 +169,7 @@ pub fn plan(
                             }
                             Err(e) => {
                                 run.notes.push(format!(
-                                    "Couldn't create the test merge for #{number}: {e}"
+                                    "Couldn't create the test merge for #{number}: {e:#}"
                                 ));
                                 None
                             }
@@ -197,7 +197,7 @@ pub fn plan(
             Ok(None) => {}
             Err(e) => run
                 .notes
-                .push(format!("Couldn't look up pull requests: {e}")),
+                .push(format!("Couldn't look up pull requests: {e:#}")),
         }
     }
 

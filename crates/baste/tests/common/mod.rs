@@ -310,6 +310,7 @@ impl TestEnv {
             .env("BASTE_SECRETS_FILE", root.join("config/secrets.json"))
             .env("BASTE_BACKEND", "host")
             .env("NO_COLOR", "1")
+            .env("BASTE_NO_NOTIFY", "1")
             .current_dir(&self.repo);
         c
     }

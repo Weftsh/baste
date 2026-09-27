@@ -130,13 +130,13 @@ fn print_run(r: &Run, verbose: bool) {
             println!(
                 "   {}",
                 dim(&format!(
-                    "ran {} on {} ({}{}), policy {}",
+                    "provenance: {} executor on {}, {} backend{}, routing policy {}",
                     p.executor,
                     p.host,
                     p.backend,
                     p.image
                         .as_deref()
-                        .map(|i| format!(", {i}"))
+                        .map(|i| format!(", image {i}"))
                         .unwrap_or_default(),
                     p.policy
                 ))

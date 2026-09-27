@@ -145,6 +145,7 @@ A job that references a secret you haven't set fails before any step runs, with 
 | `disk_gb` | `40` | Sparse writable disk per VM |
 | `pause_on_battery` | `false` | Wait for AC power before starting a run |
 | `cancel_superseded` | `true` | A new push to a branch cancels its older, still-running run |
+| `notify` | `true` | A desktop notification when a run started by a push finishes |
 | `status_wait_minutes` | `15` | How long statuses retry while the pushed commit hasn't reached GitHub yet |
 | `details_url` | GitHub Pages | Link on each status; `{run}`, `{repo}`, `{sha}` are substituted |
 

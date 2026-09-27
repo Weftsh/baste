@@ -194,11 +194,11 @@ fn runs_steps_with_env_files_and_outputs() {
     assert_eq!(steps[2].0, "Use outputs for 20");
     assert_eq!(r.outputs()["answer"], json!("42"));
     let ws = f.work.join("app/app");
+    // Compare physical paths: on macOS the temp dir lives behind /var -> /private/var.
+    let pwd = std::fs::read_to_string(ws.join("where.txt")).unwrap();
     assert_eq!(
-        std::fs::read_to_string(ws.join("where.txt"))
-            .unwrap()
-            .trim(),
-        ws.display().to_string()
+        std::path::Path::new(pwd.trim()).canonicalize().unwrap(),
+        ws.canonicalize().unwrap()
     );
 }
 

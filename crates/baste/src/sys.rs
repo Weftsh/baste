@@ -101,6 +101,37 @@ pub fn hostname() -> String {
     }
 }
 
+/// Best-effort desktop notification (Notification Center or notify-send).
+pub fn notify(title: &str, body: &str) {
+    if std::env::var_os("BASTE_NO_NOTIFY").is_some() {
+        return;
+    }
+    let quiet = |mut c: Command| {
+        let _ = c
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status();
+    };
+    if cfg!(target_os = "macos") {
+        let q = |s: &str| format!("\"{}\"", s.replace('\\', "\\\\").replace('"', "\\\""));
+        let mut c = Command::new("osascript");
+        c.args([
+            "-e",
+            &format!(
+                "display notification {} with title \"Baste\" subtitle {}",
+                q(body),
+                q(title)
+            ),
+        ]);
+        quiet(c);
+    } else if which("notify-send").is_some() {
+        let mut c = Command::new("notify-send");
+        c.args(["--app-name=Baste", &format!("Baste: {title}"), body]);
+        quiet(c);
+    }
+}
+
 /// Look up an executable in `PATH`.
 pub fn which(program: &str) -> Option<std::path::PathBuf> {
     baste_agent::process::which(program, &std::env::var("PATH").unwrap_or_default())

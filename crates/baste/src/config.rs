@@ -30,6 +30,8 @@ pub struct Config {
     pub status_wait_minutes: u64,
     /// Cancel a still-running run when the same branch is pushed again.
     pub cancel_superseded: bool,
+    /// Show a desktop notification when a run started by a push finishes.
+    pub notify: bool,
 }
 
 impl Default for Config {
@@ -44,6 +46,7 @@ impl Default for Config {
             details_url: DEFAULT_DETAILS_URL.into(),
             status_wait_minutes: 15,
             cancel_superseded: true,
+            notify: true,
         }
     }
 }

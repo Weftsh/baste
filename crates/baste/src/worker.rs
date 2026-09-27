@@ -412,6 +412,37 @@ impl Worker {
         run.finished_at = Some(Utc::now());
         drop(run);
         self.shared.save();
+        self.notify();
+    }
+
+    /// Tell the developer how a background run ended.
+    fn notify(&self) {
+        let run = self.shared.run.lock().unwrap().clone();
+        let ran_locally = run.jobs.iter().any(|j| j.state != JobState::HandedToGithub);
+        if !self.shared.config.notify || !matches!(run.trigger, Trigger::Push) || !ran_locally {
+            return;
+        }
+        let verdict = match run.state {
+            RunState::Passed => "passed",
+            RunState::Failed => "failed",
+            RunState::Cancelled => return,
+            _ => "stopped",
+        };
+        let mut body = format!(
+            "{} · {} · baste logs {}",
+            run.short_sha(),
+            run.duration_ms().map(duration).unwrap_or_default(),
+            run.id
+        );
+        if let Some(saved) = run
+            .insights
+            .as_ref()
+            .and_then(|i| i.time_saved_ms)
+            .filter(|ms| *ms > 0)
+        {
+            body.push_str(&format!(" · saved {}", duration(saved)));
+        }
+        crate::sys::notify(&format!("CI {verdict} on {}", run.branch()), &body);
     }
 
     /// Run jobs in dependency order with at most `max_parallel_jobs` at once.
@@ -1005,7 +1036,12 @@ impl<'a> JobRecorder<'a> {
                         };
                         s.continued = outcome == Outcome::Failure && conclusion == Outcome::Success;
                         s.exit_code = exit_code;
-                        s.duration_ms = Some(duration_ms);
+                        // Setup includes host-side work (bundle, VM boot).
+                        s.duration_ms = Some(if index == 0 {
+                            (Utc::now() - s.started_at).num_milliseconds().max(0) as u64
+                        } else {
+                            duration_ms
+                        });
                     }
                 });
                 self.shared.save_soon();
