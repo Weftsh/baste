@@ -99,7 +99,7 @@ cat > "$W/bundle/job.json" <<'JSON'
   "workflow": {"name": "Smoke", "file": ".github/workflows/smoke.yml"},
   "workflow_env": {"GREETING": "hello"},
   "steps": [
-    {"id": "one", "name": "Kernel and user", "run": "echo \"$GREETING from $(uname -sm) as $(id -un)\"\necho \"root=$(findmnt -n -o FSTYPE /)\"\necho \"marker=$(cat /opt/baste/marker)\"\necho \"value=42\" >> \"$GITHUB_OUTPUT\""},
+    {"id": "one", "name": "Kernel and user", "run": "echo \"$GREETING from $(uname -sm) as $(id -un)\"\necho \"root=$(findmnt -n -o FSTYPE /)\"\necho \"marker=$(cat /opt/baste/marker)\"\necho \"docker-dir=$(findmnt -n -o FSTYPE /var/lib/docker)\"\necho \"value=42\" >> \"$GITHUB_OUTPUT\""},
     {"name": "Outputs", "run": "echo \"got ${{ steps.one.outputs.value }}\"\ntest -x /usr/local/bin/baste\necho \"workspace=$GITHUB_WORKSPACE\""}
   ],
   "contexts": {"github": {"repository": "weftsh/baste", "event_name": "push"}, "matrix": {}, "strategy": {}, "needs": {}, "vars": {}, "inputs": {}},
@@ -120,6 +120,7 @@ check() { grep -q "$1" "$W/run-events.log" || { echo "missing in run events: $1"
 check 'hello from Linux x86_64 as runner'
 check 'root=overlay'
 check 'marker=provisioned'
+check 'docker-dir=ext4'
 check 'got 42'
 check 'workspace=/home/runner/work/baste/baste'
 echo "Smoke test passed"

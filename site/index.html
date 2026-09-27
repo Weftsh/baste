@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Baste</title>
+<meta name="description" content="Baste runs your repository's GitHub Actions workflows in a clean, pinned Linux VM on your machine when you push, and reports the result to GitHub as a commit status branch protection accepts.">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<main>
+  <p class="eyebrow">Baste · open source · free</p>
+  <h1>Your GitHub Actions, run on your machine before GitHub gets to them</h1>
+  <p class="lead">Baste runs the workflows you already have in a clean, pinned Linux VM when you push, and posts the result to GitHub as a commit status that branch protection accepts. No queue, no Actions minutes, no servers of ours.</p>
+  <a class="cta" href="https://github.com/weftsh/baste#install">Install</a>
+
+  <h2>How it works</h2>
+  <ol class="steps">
+    <li><span><code>git push</code> returns right away; the pre-push hook starts the run in the background.</span></li>
+    <li><span>A pending status appears on the commit for each job that runs locally.</span></li>
+    <li><span>Workflows are parsed and jobs sorted by runner: <code>ubuntu-*</code> jobs run locally, Windows and macOS jobs are handed to GitHub.</span></li>
+    <li><span>Each job boots a fresh VM from a pinned image digest (copy-on-write) and checks out the pushed commit, not your working tree.</span></li>
+    <li><span>The steps run: shell steps, JavaScript, composite and Docker actions, matrices, <code>needs</code>, <code>if</code>.</span></li>
+    <li><span>Each job's status flips to pass or fail, with its duration and the local run id.</span></li>
+    <li><span>Require <code>baste/&lt;workflow&gt;/&lt;job&gt;</code> in branch protection and PRs merge on a local pass.</span></li>
+  </ol>
+
+  <h2>Why</h2>
+  <div class="grid">
+    <div class="card"><h3>The real workflow</h3><p>Not a script you pick: the jobs in <code>.github/workflows</code>, in a runner-like VM.</p></div>
+    <div class="card"><h3>GitHub accepts it</h3><p>One commit status per job, with a stable name you can require.</p></div>
+    <div class="card"><h3>Faster than the queue</h3><p>Results arrive sooner than on hosted runners, and <code>baste insights</code> shows how much sooner.</p></div>
+    <div class="card"><h3>Zero infra</h3><p>Your machine does the work; GitHub is the only backend. Logs stay local.</p></div>
+  </div>
+
+  <h2>Quick start</h2>
+<pre><code>curl -fsSL https://raw.githubusercontent.com/weftsh/baste/main/install.sh | sh
+cd your-repo
+baste init          # checks VM support and gh auth, installs the hook
+git push            # returns immediately; CI runs locally
+baste status        # recent runs and each job's state
+baste logs latest   # output per job and step (streams while running)</code></pre>
+
+  <h2>Where it runs</h2>
+  <div class="table-wrap">
+  <table>
+    <thead><tr><th>Host</th><th>VM backend</th><th>Jobs run locally</th></tr></thead>
+    <tbody>
+      <tr><td>macOS, Apple Silicon</td><td>Tart, Linux VM with Rosetta for x86_64 binaries</td><td><code>ubuntu-*</code></td></tr>
+      <tr><td>Linux</td><td>Firecracker</td><td><code>ubuntu-*</code></td></tr>
+      <tr><td>Windows 11</td><td>Firecracker inside WSL2 (nested virtualization)</td><td><code>ubuntu-*</code></td></tr>
+      <tr><td>Intel Mac</td><td>Unsupported</td><td>None</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <footer>
+    <p>A basting stitch is the temporary one sewn before the final seam, the way a local check comes before the merge. <a href="https://github.com/weftsh/baste">Source on GitHub</a>.</p>
+  </footer>
+</main>
+</body>
+</html>

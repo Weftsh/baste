@@ -1,0 +1,46 @@
+# The workflow scripts/firecracker-e2e.sh runs through the real Firecracker
+# backend. It exercises what matters inside the VM: the runner user, the
+# checkout shim, a real JavaScript action downloaded from GitHub, Docker,
+# artifacts between jobs, and job outputs.
+name: VM e2e
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      kernel: ${{ steps.info.outputs.kernel }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: info
+        name: Inspect the VM
+        run: |
+          echo "user=$(id -un) kernel=$(uname -r) root=$(findmnt -n -o FSTYPE /)"
+          test "$(id -un)" = runner
+          test "$(findmnt -n -o FSTYPE /)" = overlay
+          test "$(cat marker.txt)" = committed
+          sudo -n true
+          echo "kernel=$(uname -r)" >> "$GITHUB_OUTPUT"
+      - name: A real JavaScript action
+        uses: actions/github-script@v7
+        with:
+          script: console.log(`github-script sees ${context.repo.owner}/${context.repo.repo} at ${context.sha.slice(0, 7)}`)
+      - name: Docker
+        run: docker run --rm alpine:3.20 echo "docker works"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: out
+          path: marker.txt
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: out
+      - run: |
+          test "$(cat marker.txt)" = committed
+          echo "build ran on kernel ${{ needs.build.outputs.kernel }}"
+  windows:
+    runs-on: windows-latest
+    steps:
+      - run: echo handed to GitHub

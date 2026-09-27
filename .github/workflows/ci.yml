@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    name: Test (Linux)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+      - name: Gate action
+        run: gate/test.sh
+
+  macos:
+    name: Test (macOS)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo clippy --workspace --all-targets -- -D warnings
+      - run: cargo test --workspace
+
+  vm-smoke:
+    name: VM guest (QEMU)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends qemu-system-x86 musl-tools e2fsprogs
+      - run: cargo build --release --target x86_64-unknown-linux-musl -p baste
+      - name: Download the pinned kernel and rootfs
+        run: |
+          base=https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.13/x86_64
+          curl -fsSLo vmlinux "$base/vmlinux-6.1.141"
+          curl -fsSLo rootfs.squashfs "$base/ubuntu-24.04.squashfs"
+          sha256sum -c <<'SUMS'
+          b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724  vmlinux
+          2332f3bb101fc8645c6322c7445acd353a51845a33e66b58c711905d685b2aa7  rootfs.squashfs
+          SUMS
+      - run: scripts/qemu-smoke.sh target/x86_64-unknown-linux-musl/release/baste vmlinux rootfs.squashfs
+
+  firecracker:
+    name: Firecracker end to end (KVM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - uses: Swatinem/rust-cache@v2
+      - run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends musl-tools e2fsprogs jq
+      - run: cargo build --release --target x86_64-unknown-linux-musl -p baste
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          ls -l /dev/kvm
+      - name: Set up VM networking
+        run: sudo target/x86_64-unknown-linux-musl/release/baste setup-network --user "$USER" --slots 2
+      - name: Run a workflow in Firecracker VMs
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: scripts/firecracker-e2e.sh target/x86_64-unknown-linux-musl/release/baste
+      - name: Collect logs
+        if: failure()
+        run: |
+          mkdir -p debug
+          cp -r /tmp/tmp.*/repo/.git/baste debug/ 2>/dev/null || true
+          find ~/.cache/baste ~/.local/state/baste -name '*.log' -exec cp {} debug/ \; 2>/dev/null || true
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: firecracker-debug
+          path: debug

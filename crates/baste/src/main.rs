@@ -73,6 +73,7 @@ enum Command {
         /// Keep streaming until the run finishes (default while it runs).
         #[arg(short, long, overrides_with = "no_follow")]
         follow: bool,
+        /// Print what's there now and exit.
         #[arg(long)]
         no_follow: bool,
         /// Only show failing steps.

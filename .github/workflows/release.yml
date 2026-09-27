@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  linux:
+    name: Build ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        target: [x86_64-unknown-linux-musl, aarch64-unknown-linux-musl]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+      - name: Install cargo-zigbuild
+        run: |
+          pip install ziglang
+          cargo install --locked cargo-zigbuild
+      - name: Check the tag matches the version
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[] | select(.name=="baste") | .version')
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME != v$version"; exit 1; }
+      - run: cargo zigbuild --release --target ${{ matrix.target }} -p baste
+      - name: Package
+        run: |
+          mkdir -p dist
+          tar -C target/${{ matrix.target }}/release -czf "dist/baste-$GITHUB_REF_NAME-${{ matrix.target }}.tar.gz" baste
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist
+
+  macos:
+    name: Build aarch64-apple-darwin
+    needs: linux
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --release -p baste
+      - uses: actions/download-artifact@v4
+        with:
+          name: aarch64-unknown-linux-musl
+          path: linux
+      - name: Package (with the Linux agent the VMs run)
+        run: |
+          mkdir -p stage dist
+          tar -xzf linux/*.tar.gz -C stage
+          mv stage/baste stage/baste-linux-aarch64
+          cp target/release/baste stage/baste
+          tar -C stage -czf "dist/baste-$GITHUB_REF_NAME-aarch64-apple-darwin.tar.gz" baste baste-linux-aarch64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: aarch64-apple-darwin
+          path: dist
+
+  publish:
+    needs: [linux, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - run: cd artifacts && sha256sum *.tar.gz > SHA256SUMS && cat SHA256SUMS
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" artifacts/* --repo "$GITHUB_REPOSITORY" --generate-notes

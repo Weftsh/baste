@@ -351,9 +351,22 @@ pub fn pid1() -> Result<()> {
         &format!("lowerdir={lowerdir},upperdir=/upper/upper,workdir=/upper/work"),
     )?;
 
+    let root = Path::new("/newroot");
+    // Docker and containerd can't layer overlay2 on an overlayfs root; give
+    // them directories on the job's ext4 disk instead.
+    if p.mode == "run" {
+        for (src, dst) in [
+            ("/upper/docker", "var/lib/docker"),
+            ("/upper/containerd", "var/lib/containerd"),
+        ] {
+            std::fs::create_dir_all(src)?;
+            std::fs::create_dir_all(root.join(dst))?;
+            mount(src, &format!("/newroot/{dst}"), "", libc::MS_BIND, "")?;
+        }
+    }
+
     // Inject the agent, its service, DNS, and quiet down units that would
     // fight the kernel's static network config.
-    let root = Path::new("/newroot");
     std::fs::create_dir_all(root.join("usr/local/bin"))?;
     std::fs::copy("/init", root.join("usr/local/bin/baste"))?;
     let units = root.join("etc/systemd/system");

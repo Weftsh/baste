@@ -1,0 +1,45 @@
+name: Baste gate
+description: >
+  Skip a workflow's GitHub-hosted jobs when Baste already reported a local
+  pass for this commit. With no local statuses, everything runs on GitHub.
+author: weftsh
+branding:
+  icon: check-circle
+  color: green
+inputs:
+  token:
+    description: Token that can read commit statuses (needs `statuses: read`).
+    default: ${{ github.token }}
+  workflow:
+    description: >
+      The workflow name Baste uses in its status contexts
+      (`baste/<workflow>/<job>`). Defaults to this workflow's name.
+    default: ${{ github.workflow }}
+  wait-minutes:
+    description: How long to wait while local jobs are still pending.
+    default: "15"
+  grace-seconds:
+    description: >
+      How long to wait for local statuses to appear at all. Baste posts a
+      pending status within seconds of a push, so this can stay short.
+    default: "60"
+outputs:
+  skip:
+    description: "`true` when every local job of this workflow passed."
+    value: ${{ steps.check.outputs.skip }}
+  result:
+    description: "`passed`, `failed`, `pending` (timed out) or `absent`."
+    value: ${{ steps.check.outputs.result }}
+runs:
+  using: composite
+  steps:
+    - id: check
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        BASTE_GATE_REPO: ${{ github.repository }}
+        BASTE_GATE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        BASTE_GATE_PREFIX: baste/${{ inputs.workflow }}/
+        BASTE_GATE_WAIT_MINUTES: ${{ inputs.wait-minutes }}
+        BASTE_GATE_GRACE_SECONDS: ${{ inputs.grace-seconds }}
+      run: "$GITHUB_ACTION_PATH/gate.sh"
