@@ -1146,13 +1146,16 @@ fn run_job_thread(shared: &Shared, backend: &dyn Backend, task: Ready, cancel: A
     rec.start_step(0, "Set up job", "setup");
     shared.save();
 
+    let timed_out = Arc::new(AtomicBool::new(false));
     let result = prepare_and_run(
-        shared, backend, &task, &job_dir, slot.index, &cancel, &mut rec,
+        shared, backend, &task, &job_dir, slot.index, &cancel, &timed_out, &mut rec,
     );
     drop(slot);
     let _ = std::fs::remove_dir_all(job_dir.join("bundle"));
 
-    let cancelled = cancel.load(Ordering::SeqCst) || CANCEL_REQUESTED.load(Ordering::SeqCst);
+    let timed_out = timed_out.load(Ordering::SeqCst);
+    let cancelled =
+        !timed_out && (cancel.load(Ordering::SeqCst) || CANCEL_REQUESTED.load(Ordering::SeqCst));
     shared.with_job(&task.key, |j| {
         j.finished_at = Some(Utc::now());
         match (&result, rec.finished.take()) {
@@ -1172,8 +1175,13 @@ fn run_job_thread(shared: &Shared, backend: &dyn Backend, task: Ready, cancel: A
                 } else {
                     JobState::Failed
                 };
-                j.error
-                    .get_or_insert_with(|| "The runner stopped without reporting a result.".into());
+                j.error.get_or_insert_with(|| {
+                    if timed_out {
+                        "The job ran past its timeout and its VM was stopped.".into()
+                    } else {
+                        "The runner stopped without reporting a result.".into()
+                    }
+                });
             }
             (Err(e), _) => {
                 j.state = if cancelled {
@@ -1206,6 +1214,7 @@ fn run_job_thread(shared: &Shared, backend: &dyn Backend, task: Ready, cancel: A
     shared.save();
 }
 
+#[allow(clippy::too_many_arguments)]
 fn prepare_and_run(
     shared: &Shared,
     backend: &dyn Backend,
@@ -1213,6 +1222,7 @@ fn prepare_and_run(
     job_dir: &std::path::Path,
     slot: usize,
     cancel: &Arc<AtomicBool>,
+    timed_out: &Arc<AtomicBool>,
     rec: &mut JobRecorder,
 ) -> Result<()> {
     let pw = &shared.planned[task.pw];
@@ -1262,7 +1272,7 @@ fn prepare_and_run(
         }
     }
     let bundle_dir = job_dir.join("bundle");
-    bundle::write_bundle(
+    let spec = bundle::write_bundle(
         &bundle_dir,
         BundleInput {
             run_id: &shared.run_id(),
@@ -1287,11 +1297,33 @@ fn prepare_and_run(
         slot,
         cancel: cancel.clone(),
     };
+    // The agent enforces the job timeout inside the VM; this watchdog stops a
+    // VM that stopped responding altogether, a little after that.
+    let limit = Duration::from_secs_f64(spec.timeout_minutes.unwrap_or(360.0).max(0.0) * 60.0)
+        + Duration::from_secs(300);
+    let done = Arc::new(AtomicBool::new(false));
+    let watchdog = {
+        let (done, cancel, timed_out) = (done.clone(), cancel.clone(), timed_out.clone());
+        let started = Instant::now();
+        std::thread::spawn(move || {
+            while !done.load(Ordering::SeqCst) {
+                if started.elapsed() > limit {
+                    timed_out.store(true, Ordering::SeqCst);
+                    cancel.store(true, Ordering::SeqCst);
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(500));
+            }
+        })
+    };
     // Split the recorder between the event and log callbacks.
     let rec_cell = std::cell::RefCell::new(rec);
-    backend.run(&launch, &mut |e| rec_cell.borrow_mut().event(e), &mut |l| {
+    let result = backend.run(&launch, &mut |e| rec_cell.borrow_mut().event(e), &mut |l| {
         rec_cell.borrow_mut().host_log(l)
-    })
+    });
+    done.store(true, Ordering::SeqCst);
+    let _ = watchdog.join();
+    result
 }
 
 #[cfg(test)]
