@@ -1,0 +1,40 @@
+[package]
+name = "baste"
+description = "Run your GitHub Actions workflows locally in a pinned VM and report the result to GitHub"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "baste"
+path = "src/main.rs"
+
+[dependencies]
+baste-expr.workspace = true
+baste-workflow.workspace = true
+baste-protocol.workspace = true
+baste-agent.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+regex.workspace = true
+libc.workspace = true
+sha2.workspace = true
+hex.workspace = true
+tar.workspace = true
+tempfile.workspace = true
+clap = { version = "4", features = ["derive", "env"] }
+toml = "0.8"
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+ureq = { version = "3", features = ["json", "platform-verifier"] }
+flate2 = "1"
+rand = "0.9"
+base64 = "0.22"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3"
+
+[dev-dependencies]
+tempfile.workspace = true

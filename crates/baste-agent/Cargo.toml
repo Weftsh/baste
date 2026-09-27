@@ -1,0 +1,27 @@
+[package]
+name = "baste-agent"
+description = "Baste job executor that runs inside the VM"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+baste-expr.workspace = true
+baste-workflow.workspace = true
+baste-protocol.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+anyhow.workspace = true
+regex.workspace = true
+libc.workspace = true
+sha2.workspace = true
+hex.workspace = true
+tar.workspace = true
+globset = "0.4"
+walkdir = "2"
+base64 = "0.22"
+
+[dev-dependencies]
+tempfile.workspace = true

@@ -1,0 +1,16 @@
+[package]
+name = "baste-workflow"
+description = "GitHub Actions workflow model and job planner"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+baste-expr.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+regex.workspace = true
+yaml-rust2 = "0.10"

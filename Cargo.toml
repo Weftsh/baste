@@ -1,0 +1,37 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/baste-expr",
+    "crates/baste-workflow",
+    "crates/baste-protocol",
+    "crates/baste-agent",
+    "crates/baste",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/weftsh/baste"
+rust-version = "1.85"
+
+[workspace.dependencies]
+baste-expr = { path = "crates/baste-expr" }
+baste-workflow = { path = "crates/baste-workflow" }
+baste-protocol = { path = "crates/baste-protocol" }
+baste-agent = { path = "crates/baste-agent" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+anyhow = "1"
+thiserror = "2"
+regex = "1"
+libc = "0.2"
+sha2 = "0.10"
+hex = "0.4"
+tar = "0.4"
+tempfile = "3"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
