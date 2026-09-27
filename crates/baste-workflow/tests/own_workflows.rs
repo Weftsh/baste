@@ -35,6 +35,9 @@ fn ci_workflow() {
 fn release_and_pages_workflows() {
     let wf = load(".github/workflows/release.yml");
     assert!(wf.on.matches_push("refs/tags/v0.1.0", None).unwrap());
+    assert!(wf.on.matches_push("refs/tags/v0.2.0-rc.1", None).unwrap());
+    // The gate action's major tag isn't a release.
+    assert!(!wf.on.matches_push("refs/tags/v1", None).unwrap());
     assert!(!wf.on.matches_push("refs/heads/main", None).unwrap());
     let p = placements(&wf);
     assert_eq!(p.iter().filter(|(_, local)| *local).count(), 3, "{p:?}");
