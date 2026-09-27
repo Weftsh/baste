@@ -32,3 +32,9 @@ cargo build --release --target x86_64-unknown-linux-musl -p baste
 ## Fidelity first
 
 Baste's promise is that a local pass predicts a GitHub pass. When adding support for a workflow feature, match GitHub's behaviour, including its odd corners. Anything that can't be matched should be handed to GitHub before the run starts (see `unsupported_reason` in `crates/baste-workflow/src/plan.rs`), never half-run.
+
+## Releasing
+
+1. Set the new version in `Cargo.toml` (`[workspace.package] version`) and merge it to `main`.
+2. Run the **Release** workflow from the Actions tab on `main` with the tag (`v0.2.0`), or push that tag. It builds the Linux (x86_64, arm64) and macOS binaries, publishes them with `SHA256SUMS`, and creates the tag. `install.sh` picks up the newest release.
+3. When run from the Actions tab, it also points the gate action's major tag (`v1`) at the release, so `weftsh/baste/gate@v1` follows it. Leave that input empty to keep the tag where it is.
