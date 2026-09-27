@@ -379,7 +379,18 @@ pub fn follow_run(store: &Store, run_id: &str, job: Option<&str>) -> Result<bool
     let mut last_planning_note = false;
     let started = std::time::Instant::now();
     loop {
-        let run = store.load(run_id)?;
+        // A reader can race a save on some filesystems; retry briefly.
+        let mut attempt = 0;
+        let run = loop {
+            match store.load(run_id) {
+                Ok(r) => break r,
+                Err(_) if attempt < 20 => {
+                    attempt += 1;
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(e) => return Err(e),
+            }
+        };
         let jobs = if run.jobs.is_empty() {
             vec![]
         } else {

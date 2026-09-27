@@ -131,9 +131,12 @@ impl Shared {
     }
 
     fn save(&self) {
+        // Serialize saves (snapshot and write together) so job threads never
+        // interleave writes or replace a newer snapshot with an older one.
+        let mut last = self.last_save.lock().unwrap();
         let run = self.run.lock().unwrap().clone();
         let _ = self.store.save(&run);
-        *self.last_save.lock().unwrap() = Instant::now();
+        *last = Instant::now();
     }
 
     /// Save at most every 300ms (used for high-frequency step updates).

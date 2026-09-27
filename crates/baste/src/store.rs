@@ -361,7 +361,11 @@ impl Store {
     pub fn save(&self, run: &Run) -> Result<()> {
         let dir = self.run_dir(&run.id);
         std::fs::create_dir_all(&dir).with_context(|| format!("creating {}", dir.display()))?;
-        let tmp = dir.join(format!("run.json.{}", std::process::id()));
+        let tmp = dir.join(format!(
+            "run.json.{}.{:x}",
+            std::process::id(),
+            rand::random::<u64>()
+        ));
         std::fs::write(&tmp, serde_json::to_vec_pretty(run)?)?;
         std::fs::rename(&tmp, dir.join("run.json"))?;
         Ok(())
