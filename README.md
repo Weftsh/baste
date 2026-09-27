@@ -123,7 +123,7 @@ A job that references a secret you haven't set fails before any step runs, with 
 | `push` and `pull_request` triggers, with branch, tag, path and type filters | Jobs on `windows-*`, `macos-*`, self-hosted runners or runner groups |
 | `ubuntu-*` jobs | Service containers (`services:`), job containers (`container:`) |
 | `run:` steps with `bash`, `sh`, `python` or a custom shell | Reusable workflows (`jobs.<id>.uses`) |
-| JavaScript (node20/node24), composite and Docker actions, pre/post steps | Jobs with `environment:` or that request OIDC tokens |
+| JavaScript (run on Node 24, as on GitHub), composite and Docker actions, pre/post steps | Jobs with `environment:` or that request OIDC tokens |
 | `needs:` ordering and outputs, matrices with include/exclude, fail-fast, max-parallel | |
 | `env`, `defaults`, expressions and `if:` (status functions, `hashFiles`, `fromJSON`, ...) | |
 | `GITHUB_ENV`, `GITHUB_OUTPUT`, `GITHUB_PATH`, step summaries, workflow commands, masking | |

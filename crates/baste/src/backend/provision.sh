@@ -54,9 +54,9 @@ install_node node24 24.21.0 \
   fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6 \
   6ad1325edbdb5649c379b75a237147a666c95d4f9ae8d340fef2d1575d289ad2
 # `node` on PATH, like the runner images.
-ln -sf /opt/baste/node20/bin/node /usr/local/bin/node
-ln -sf /opt/baste/node20/bin/npm /usr/local/bin/npm
-ln -sf /opt/baste/node20/bin/npx /usr/local/bin/npx
+ln -sf /opt/baste/node24/bin/node /usr/local/bin/node
+ln -sf /opt/baste/node24/bin/npm /usr/local/bin/npm
+ln -sf /opt/baste/node24/bin/npx /usr/local/bin/npx
 echo "::endgroup::"
 
 if [ -n "${BASTE_ROSETTA:-}" ]; then
@@ -77,6 +77,12 @@ UNIT
   echo "::endgroup::"
 fi
 
+# Docker 28+ filters with the iptables raw table; the Firecracker kernel has
+# none (CONFIG_IP_NF_RAW), so skip those rules there. The VM sits behind NAT.
+if ! iptables -t raw -L -n >/dev/null 2>&1; then
+  mkdir -p /etc/systemd/system/docker.service.d
+  printf '[Service]\nEnvironment=DOCKER_INSECURE_NO_IPTABLES_RAW=1\n' > /etc/systemd/system/docker.service.d/baste.conf
+fi
 systemctl enable docker.service containerd.service >/dev/null 2>&1 || true
 apt-get clean
 rm -rf /var/lib/apt/lists/* /tmp/*

@@ -385,7 +385,7 @@ impl Store {
                 runs.push(run);
             }
         }
-        runs.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        runs.sort_by_key(|r| std::cmp::Reverse(r.created_at));
         Ok(runs)
     }
 

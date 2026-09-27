@@ -197,7 +197,10 @@ fn checkout(job: &mut Job, inputs: &Map<String, Value>, scope: &Scope) -> Option
         let pack_file = job.opts.bundle.join(&pack.file);
         let user = job.user.clone();
         run_git(job, index, &dir, &["init", "-q", "."])?;
-        let _ = run_git(job, index, &dir, &["remote", "remove", "origin"]);
+        let config = std::fs::read_to_string(dir.join(".git/config")).unwrap_or_default();
+        if config.contains("[remote \"origin\"]") {
+            run_git(job, index, &dir, &["remote", "remove", "origin"])?;
+        }
         run_git(job, index, &dir, &["remote", "add", "origin", &remote])?;
         run_git(job, index, &dir, &["config", "--local", "gc.auto", "0"])?;
         let pack_dir = dir.join(".git/objects/pack");

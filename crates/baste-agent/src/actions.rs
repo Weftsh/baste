@@ -368,10 +368,23 @@ fn action_env(
 }
 
 fn node_binary(job: &Job, using: &str) -> Result<PathBuf, String> {
-    if let Some(p) = job.spec.runner.node.get(using).and_then(Value::as_str) {
-        let p = PathBuf::from(p);
-        if p.is_file() {
-            return Ok(p);
+    // GitHub runs Node 20 (and older) actions on Node 24 unless a job opts out.
+    let allow_old = job
+        .env
+        .get("ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION")
+        .map(baste_expr::to_display_string)
+        .is_some_and(|v| v.eq_ignore_ascii_case("true"));
+    let preferred = if using == "node20" && !allow_old {
+        ["node24", "node20"]
+    } else {
+        [using, "node24"]
+    };
+    for runtime in preferred {
+        if let Some(p) = job.spec.runner.node.get(runtime).and_then(Value::as_str) {
+            let p = PathBuf::from(p);
+            if p.is_file() {
+                return Ok(p);
+            }
         }
     }
     let path = std::env::var("PATH").unwrap_or_default();

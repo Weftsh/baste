@@ -228,7 +228,7 @@ pub fn print_insights(runs: &[Run]) {
             (k, avg, v.len())
         })
         .collect();
-    ranked.sort_by(|a, b| b.1.cmp(&a.1));
+    ranked.sort_by_key(|r| std::cmp::Reverse(r.1));
     if !ranked.is_empty() {
         println!("\n{}", bold("Slowest steps (average)"));
         for ((job, step), avg, n) in ranked.iter().take(10) {

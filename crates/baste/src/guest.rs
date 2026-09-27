@@ -353,15 +353,19 @@ pub fn pid1() -> Result<()> {
 
     let root = Path::new("/newroot");
     // Docker and containerd can't layer overlay2 on an overlayfs root; give
-    // them directories on the job's ext4 disk instead.
-    if p.mode == "run" {
-        for (src, dst) in [
-            ("/upper/docker", "var/lib/docker"),
-            ("/upper/containerd", "var/lib/containerd"),
-        ] {
+    // them directories on the job's ext4 disk instead. While preparing, their
+    // data shouldn't become part of the layer at all.
+    for (src, dst) in [
+        ("/upper/docker", "var/lib/docker"),
+        ("/upper/containerd", "var/lib/containerd"),
+    ] {
+        std::fs::create_dir_all(root.join(dst))?;
+        let target = format!("/newroot/{dst}");
+        if p.mode == "run" {
             std::fs::create_dir_all(src)?;
-            std::fs::create_dir_all(root.join(dst))?;
-            mount(src, &format!("/newroot/{dst}"), "", libc::MS_BIND, "")?;
+            mount(src, &target, "", libc::MS_BIND, "")?;
+        } else {
+            mount("tmpfs", &target, "tmpfs", 0, "mode=0711")?;
         }
     }
 
@@ -405,6 +409,10 @@ pub fn pid1() -> Result<()> {
             .collect::<String>(),
     )?;
     std::fs::write(root.join("etc/hostname"), "baste\n")?;
+    std::fs::write(
+        root.join("etc/hosts"),
+        "127.0.0.1 localhost\n127.0.1.1 baste\n::1 localhost ip6-localhost ip6-loopback\n",
+    )?;
     std::fs::write(root.join("etc/fstab"), "# managed by baste\n")?;
 
     // switch_root: move the new root over / and hand off to systemd.

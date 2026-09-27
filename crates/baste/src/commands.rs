@@ -697,7 +697,7 @@ jobs:
     if: needs.baste-gate.outputs.skip != 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: make test"#
     );
 }

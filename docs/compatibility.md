@@ -39,7 +39,7 @@ Statuses for jobs that don't run: a job whose `if:` is false is posted as `succe
 | --- | --- |
 | `run:` with the default shell (`bash -e`), `bash`, `sh`, `python`, or `command {0}` | Supported |
 | `working-directory`, `env`, `if`, `continue-on-error`, `timeout-minutes`, `id`, `name` | Supported |
-| JavaScript actions (`node12`/`node16`/`node20` run on Node 20, `node24` on Node 24) | Supported, including `pre`/`post` with `pre-if`/`post-if` |
+| JavaScript actions (`node12` through `node24` run on Node 24, as GitHub now does; `ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true` keeps Node 20) | Supported, including `pre`/`post` with `pre-if`/`post-if` |
 | Composite actions (nested, with inputs and outputs) | Supported |
 | Docker actions (`Dockerfile` or `docker://`) | Supported (Docker runs inside the VM) |
 | Local actions (`uses: ./path`) | Supported |

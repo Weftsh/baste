@@ -82,6 +82,7 @@ pub fn work(store: Store, git: Git, run_id: &str) -> Result<()> {
             poster,
             api,
             secrets: None,
+            secrets_error: None,
             actions: ActionCache::new(None),
             packs: PackCache::new(store.run_dir(run_id).join("checkout")),
             config,
@@ -117,6 +118,7 @@ struct Shared {
     poster: StatusPoster,
     api: Option<GitHub>,
     secrets: Option<Secrets>,
+    secrets_error: Option<String>,
     actions: ActionCache,
     packs: PackCache,
     config: Config,
@@ -274,7 +276,8 @@ impl Worker {
             {
                 Ok(sec) => Some(sec),
                 Err(e) => {
-                    run.notes.push(format!("Secrets unavailable: {e}"));
+                    // Only worth mentioning to jobs that use secrets.
+                    s.secrets_error = Some(e.to_string());
                     None
                 }
             };
@@ -1218,6 +1221,9 @@ fn prepare_and_run(
             "Missing local secrets: {}",
             secrets.missing.join(", ")
         ));
+        if let Some(e) = &shared.secrets_error {
+            rec.host_log(&format!("Secrets unavailable: {e}"));
+        }
     }
     let bundle_dir = job_dir.join("bundle");
     bundle::write_bundle(
