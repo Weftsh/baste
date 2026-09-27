@@ -1,0 +1,41 @@
+<!doctype html>
+<!-- Source for public/og.png (1280x640), the link preview and GitHub social
+     preview image. Render it after `npm run build`, for example with
+     Playwright: page.setViewportSize({width: 1280, height: 640}) and
+     page.screenshot(). -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../public/assets/site.css">
+</head>
+<body class="m-0 h-[640px] w-[1280px] overflow-hidden">
+<div class="relative isolate flex h-full items-center gap-16 overflow-hidden px-20">
+  <div class="bg-grid absolute inset-0 -z-10"></div>
+  <div class="absolute -top-40 left-1/2 -z-10 h-[28rem] w-[64rem] -translate-x-1/2 rounded-full bg-gradient-to-tr from-emerald-500/25 via-teal-400/10 to-cyan-400/20 blur-3xl"></div>
+  <div class="flex-1">
+    <div class="flex items-center gap-4">
+      <img src="../public/favicon.svg" alt="" class="size-14">
+      <span class="text-4xl font-semibold tracking-tight text-white">Baste</span>
+    </div>
+    <h1 class="mt-10 text-[3.4rem] leading-[1.08] font-semibold tracking-tight text-white">
+      Run your GitHub Actions locally.
+      <span class="bg-gradient-to-r from-emerald-300 to-teal-200 bg-clip-text text-transparent">Merge on the green check.</span>
+    </h1>
+    <p class="mt-8 text-2xl text-zinc-400">Local CI in a fresh VM, reported to GitHub. Open source.</p>
+  </div>
+  <div class="window w-[25rem] shrink-0">
+    <div class="flex items-center gap-3 border-b border-white/5 px-6 py-5">
+      <span class="flex size-9 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-400">
+        <svg viewBox="0 0 20 20" fill="currentColor" class="size-5"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd"/></svg>
+      </span>
+      <p class="text-lg font-semibold text-white">All checks have passed</p>
+    </div>
+    <ul class="divide-y divide-white/5">
+      <li class="px-6 py-4"><p class="text-lg text-zinc-200"><span class="text-emerald-400">✓</span> baste/CI/lint</p><p class="pl-6 text-sm text-zinc-500">Passed in 41s · locally</p></li>
+      <li class="px-6 py-4"><p class="text-lg text-zinc-200"><span class="text-emerald-400">✓</span> baste/CI/build</p><p class="pl-6 text-sm text-zinc-500">Passed in 1m02s · locally</p></li>
+      <li class="px-6 py-4"><p class="text-lg text-zinc-200"><span class="text-emerald-400">✓</span> baste/CI/test</p><p class="pl-6 text-sm text-zinc-500">Passed in 2m04s · locally</p></li>
+    </ul>
+  </div>
+</div>
+</body>
+</html>

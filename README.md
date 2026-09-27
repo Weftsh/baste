@@ -1,15 +1,93 @@
 # Baste
 
-**Local CI for GitHub Actions.** Baste runs your repository's existing GitHub Actions workflows in a clean, pinned Linux VM on your machine when you push. It then posts the result to GitHub as a commit status that branch protection accepts.
+[![CI](https://github.com/weftsh/baste/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/weftsh/baste/actions/workflows/ci.yml)
+[![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
+[![Website](https://img.shields.io/badge/website-weftsh.github.io%2Fbaste-10b981.svg)](https://weftsh.github.io/baste/)
 
-- **The real workflow**: the jobs in `.github/workflows`, not a script you pick. They run in a runner-like VM, not in Docker on your host.
-- **GitHub accepts it**: one commit status per job, with a stable name (`baste/<workflow>/<job>`) you can make a required check.
-- **Non-blocking**: `git push` returns immediately; the run happens in the background.
-- **Zero infra**: your machine does the work and GitHub is the only backend. Logs stay local.
+**Run your GitHub Actions locally. Merge on the green check.**
+
+Baste runs the workflows you already have in a fresh Linux VM on your machine every time you `git push`, then posts each job to GitHub as a commit status that branch protection accepts. No queue, no workflow rewrites, no servers.
+
+**[Website](https://weftsh.github.io/baste/)** · [Get started](#get-started) · [How it works](#how-it-works) · [Compatibility](docs/compatibility.md) · [Architecture](docs/architecture.md)
+
+[![Baste: run GitHub Actions locally, merge on the green check](site/public/og.png)](https://weftsh.github.io/baste/)
+
+## Why Baste
+
+Cloud CI is rented and queued, while your laptop sits mostly idle. Every push waits for a hosted runner, then bills you for the minutes.
+
+- **Your real workflow, run faithfully.** The jobs in `.github/workflows`, in a fresh VM built like GitHub's Ubuntu runner, on the exact commit you pushed. Uncommitted edits never leak into the result.
+- **A check GitHub accepts.** One commit status per job, with a stable name like `baste/CI/test` that you can make a required check. Pull requests merge on a local pass.
+- **Never blocks a push.** `git push` returns right away and the run happens in the background, with a pending status on the commit within seconds.
+- **Honest about what it can't run.** Windows, macOS and service-container jobs are handed to GitHub before the run starts, never half-run.
+- **Zero infrastructure.** Your machine does the work, GitHub is the only backend, and your logs stay local. Free and open source.
+
+Other local tools solve one half of the problem:
+
+| | [act](https://github.com/nektos/act) | [gh-signoff](https://github.com/basecamp/gh-signoff) | **Baste** |
+| --- | :---: | :---: | :---: |
+| Runs the jobs in your workflow files | ✓ | a script you choose | ✓ |
+| Each job in a fresh, runner-like VM | Docker on your host | | ✓ |
+| Result shows up on the commit in GitHub | | ✓ | ✓ |
+| Starts on `git push`, in the background | you run it | you run it | ✓ |
 
 > A basting stitch is the temporary one sewn before the final seam, the way a local check comes before the merge.
 
-Existing tools cover one half each. [nektos/act](https://github.com/nektos/act) runs workflows in Docker, but GitHub never sees the result. [basecamp/gh-signoff](https://github.com/basecamp/gh-signoff) posts a status, but for a script you choose. Baste runs the real workflow in a VM *and* reports it to GitHub.
+## Get started
+
+You need macOS 14+ on Apple Silicon, Linux with KVM, or Windows 11 with WSL2, plus the [GitHub CLI](https://cli.github.com) logged in (`gh auth login`). Baste uses that login and never stores a token of its own.
+
+**1. Install Baste**
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/weftsh/baste/main/install.sh | sh
+```
+
+This puts a single binary in `~/.local/bin` (the installer tells you if that isn't on your `PATH`). On macOS it also installs the Linux agent that runs inside the VMs.
+
+**2. Set up your machine's VM backend (once)**
+
+| Host | Backend | Setup |
+| --- | --- | --- |
+| macOS 14+, Apple Silicon | [Tart](https://tart.run), with Rosetta for x86_64 | `brew install cirruslabs/cli/tart`<br>`softwareupdate --install-rosetta --agree-to-license` |
+| Linux (x86_64, arm64) | [Firecracker](https://firecracker-microvm.github.io) | `sudo usermod -aG kvm $USER` (then log in again)<br>install `e2fsprogs`<br>`sudo "$(command -v baste)" setup-network` |
+| Windows 11 | Firecracker inside WSL2 | Set `nestedVirtualization=true` under `[wsl2]` in `%UserProfile%\.wslconfig` and run `wsl --shutdown`. Then do every step on this page inside WSL2, including the Linux setup. |
+
+Intel Macs aren't supported.
+
+**3. Turn it on in a repository**
+
+```sh
+cd your-repo
+baste init             # checks virtualization, gh login and status permission, then installs a pre-push hook
+baste image prepare    # optional: download and provision the pinned VM image now instead of on the first push
+```
+
+`baste init` checks everything before it changes anything. If something is missing, like KVM access, `gh`, or a token that can't write commit statuses, it says what's wrong and changes nothing. Run `baste doctor` any time to repeat the checks.
+
+Want to try it before anything reaches GitHub? `baste run --no-status` runs your workflows for `HEAD` locally and posts nothing.
+
+**4. Push**
+
+```console
+$ git push
+baste: running CI for a8d31b7 (feature/login) locally in run q7hz2m; see `baste status`
+
+$ baste status
+q7hz2m  ● running  a8d31b7  feature/login  just now  push
+   ✓ CI / lint                41s
+   ✓ CI / build             1m02s
+   ● CI / test (node 22)    1m18s  running 'npm test'
+   → CI / e2e (windows)            handed to GitHub: windows-latest jobs run on GitHub
+
+$ baste logs latest     # every step's output, live while it runs
+```
+
+Each local job shows up on the commit as `baste/<workflow>/<job>`, pending at first, then green or red with its duration and run id.
+
+**5. Merge on a local pass**
+
+In branch protection (or a ruleset), require the `baste/…` checks that `baste init` listed, and make the GitHub-hosted versions of those jobs optional. That's it: pull requests now merge on a local pass. To also stop spending Actions minutes on jobs that already passed, add the [gate action](#merging-on-a-local-pass).
 
 ## How it works
 
@@ -21,38 +99,7 @@ Existing tools cover one half each. [nektos/act](https://github.com/nektos/act) 
 6. Each job's status flips to **success** or **failure**, with the duration and the local run id. The status links to a page that shows the `baste logs <run>` command.
 7. Make those contexts required checks in branch protection, and PRs merge on a local pass.
 
-## Install
-
-```sh
-curl -fsSL https://raw.githubusercontent.com/weftsh/baste/main/install.sh | sh
-```
-
-This installs a single binary into `~/.local/bin`. On macOS it also installs the Linux agent that runs inside the VMs.
-
-Baste gets GitHub access from the [GitHub CLI](https://cli.github.com), so install `gh` and run `gh auth login` first. Baste never stores a token of its own.
-
-### Per platform
-
-| Host | VM backend | One-time setup |
-| --- | --- | --- |
-| macOS 14+, Apple Silicon | [Tart](https://tart.run), Linux VM with Rosetta | `brew install cirruslabs/cli/tart` and `softwareupdate --install-rosetta --agree-to-license` |
-| Linux (x86_64, arm64) | [Firecracker](https://firecracker-microvm.github.io) | Access to `/dev/kvm` (`sudo usermod -aG kvm $USER`), `e2fsprogs`, then `sudo baste setup-network` |
-| Windows 11 | Firecracker inside WSL2 | The Linux steps inside WSL2, with `nestedVirtualization=true` under `[wsl2]` in `.wslconfig` |
-| Intel Mac | Unsupported | |
-
-On the first run, Baste downloads the pinned image and verifies it by digest. It then provisions the slim image once (git, build tools, Python, Node.js for JavaScript actions, Docker, and a `runner` user) and caches it locally. Later runs boot a copy-on-write clone in seconds. You can do this ahead of time with `baste image prepare`.
-
-## Quick start
-
-```sh
-cd your-repo
-baste init          # checks virtualization, gh auth and status permission, then installs the hook
-git push            # returns immediately; CI runs locally
-baste status        # recent runs, each job's state
-baste logs latest   # output per job and step; streams while the run is in progress
-```
-
-`baste init` checks everything first. If anything blocking fails, such as an Intel Mac, missing nested virtualization, a missing gh, or a token that can't write commit statuses, it stops, says why, and changes nothing.
+On the first run, Baste downloads the pinned image and verifies it by digest. It then provisions the slim image once (git, build tools, Python, Node.js for JavaScript actions, Docker, and a `runner` user) and caches it locally. Later runs boot a copy-on-write clone in seconds.
 
 ## Merging on a local pass
 
@@ -101,7 +148,7 @@ Only gate jobs that Baste runs locally (`ubuntu-*`), not Windows or macOS ones. 
 | `sudo baste setup-network` | Linux: tap devices and NAT for Firecracker VMs, persisted with a systemd unit |
 | `baste uninstall` | Remove the hook |
 
-Run ids are short (for example `k3x9mq`) and appear in each status description. `latest` and unique prefixes work too.
+Run ids are short (for example `q7hz2m`) and appear in each status description. `latest` and unique prefixes work too.
 
 ## Secrets
 
@@ -165,7 +212,7 @@ crates/
   baste-agent      the executor that runs a job inside the VM
   baste            the CLI: hook, worker, statuses, backends, commands
 gate/              the opt-in gate action
-site/              the static page status links point to
+site/              the website (Tailwind, GitHub Pages), including the page status links point to
 ```
 
 The agent speaks one **runner protocol**, the same one a cloud runner will speak later, so there are no local-only code paths. **Routing is a policy** ("the pusher's machine runs the push") kept apart from the agent. See [docs/architecture.md](docs/architecture.md).
@@ -183,6 +230,9 @@ scripts/qemu-smoke.sh target/x86_64-unknown-linux-musl/release/baste vmlinux roo
 
 # The whole Firecracker backend (needs KVM and `sudo baste setup-network`):
 scripts/firecracker-e2e.sh target/x86_64-unknown-linux-musl/release/baste
+
+# The website (Node.js 20+): build the Tailwind CSS, check links, then open site/public/index.html
+cd site && npm ci && npm run build && npm run check   # `npm run dev` rebuilds on change
 ```
 
 CI runs all of these, including the Firecracker run on KVM-enabled GitHub runners. The `host` backend (`--backend host`) runs jobs directly on your machine with no VM. It's useful for working on Baste, but offers no isolation or fidelity guarantees.

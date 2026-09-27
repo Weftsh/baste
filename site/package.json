@@ -1,0 +1,14 @@
+{
+  "name": "baste-site",
+  "private": true,
+  "description": "The Baste website, published with GitHub Pages.",
+  "scripts": {
+    "build": "tailwindcss -i src/site.css -o public/assets/site.css --minify",
+    "dev": "tailwindcss -i src/site.css -o public/assets/site.css --watch",
+    "check": "node check.mjs"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.3",
+    "tailwindcss": "4.3.3"
+  }
+}

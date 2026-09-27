@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Baste: run GitHub Actions locally, merge on a local pass</title>
+<meta name="description" content="Baste runs your existing GitHub Actions workflows in a fresh Linux VM on your machine when you push, and posts each job to GitHub as a commit status you can require. Free and open source.">
+<link rel="canonical" href="https://weftsh.github.io/baste/">
+<meta name="theme-color" content="#09090b">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Baste">
+<meta property="og:title" content="Baste: run GitHub Actions locally, merge on a local pass">
+<meta property="og:description" content="Your existing workflows, in a fresh Linux VM on your machine, reported to GitHub as checks branch protection accepts.">
+<meta property="og:url" content="https://weftsh.github.io/baste/">
+<meta property="og:image" content="https://weftsh.github.io/baste/og.png">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="Baste: run GitHub Actions locally, merge on a local pass">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="preload" href="assets/fonts/inter-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="assets/site.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Baste",
+  "description": "Local CI for GitHub Actions. Runs your existing workflows in a fresh Linux VM on your machine when you push, and posts each job to GitHub as a commit status.",
+  "applicationCategory": "DeveloperApplication",
+  "operatingSystem": "macOS, Linux, Windows (WSL2)",
+  "url": "https://weftsh.github.io/baste/",
+  "downloadUrl": "https://github.com/weftsh/baste/releases",
+  "license": "https://www.apache.org/licenses/LICENSE-2.0",
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+}
+</script>
+</head>
+<body>
+<a href="#main" class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-emerald-400 focus:px-4 focus:py-2 focus:text-zinc-950">Skip to content</a>
+
+<header class="sticky top-0 z-40 border-b border-white/5 bg-zinc-950/80 backdrop-blur">
+  <nav class="mx-auto flex h-16 max-w-6xl items-center gap-6 px-4 sm:px-6" aria-label="Main">
+    <a href="./" class="flex items-center gap-2.5 font-semibold text-white">
+      <img src="favicon.svg" alt="" class="size-7" width="28" height="28">
+      <span class="text-lg tracking-tight">Baste</span>
+    </a>
+    <div class="hidden items-center gap-6 text-sm text-zinc-400 md:flex">
+      <a href="#how" class="hover:text-white">How it works</a>
+      <a href="#features" class="hover:text-white">Features</a>
+      <a href="#merge" class="hover:text-white">Merge gates</a>
+      <a href="#faq" class="hover:text-white">FAQ</a>
+      <a href="https://github.com/weftsh/baste#readme" class="hover:text-white">Docs</a>
+    </div>
+    <div class="ml-auto flex items-center gap-3">
+      <a href="https://github.com/weftsh/baste" class="hidden items-center gap-2 rounded-lg px-3 py-2 text-sm text-zinc-300 ring-1 ring-white/10 hover:bg-white/5 hover:text-white sm:inline-flex" data-cta="nav-github">
+        <svg viewBox="0 0 16 16" class="size-4 fill-current" aria-hidden="true"><path d="M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z"/></svg>
+        <span>Star</span>
+        <span class="hidden border-l border-white/10 pl-2 tabular-nums" data-stars></span>
+      </a>
+      <a href="#install" class="btn btn-primary" data-cta="nav-install">Install</a>
+      <button type="button" class="-mr-2 rounded-lg p-2 text-zinc-400 hover:text-white md:hidden" aria-label="Open menu" aria-expanded="false" aria-controls="mobile-menu" data-menu-toggle>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-6" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/></svg>
+      </button>
+    </div>
+  </nav>
+  <div id="mobile-menu" class="hidden border-t border-white/5 px-4 pt-2 pb-4 md:hidden" data-menu>
+    <a href="#how" class="block rounded-lg px-3 py-2 text-zinc-300 hover:bg-white/5">How it works</a>
+    <a href="#features" class="block rounded-lg px-3 py-2 text-zinc-300 hover:bg-white/5">Features</a>
+    <a href="#merge" class="block rounded-lg px-3 py-2 text-zinc-300 hover:bg-white/5">Merge gates</a>
+    <a href="#faq" class="block rounded-lg px-3 py-2 text-zinc-300 hover:bg-white/5">FAQ</a>
+    <a href="https://github.com/weftsh/baste#readme" class="block rounded-lg px-3 py-2 text-zinc-300 hover:bg-white/5">Docs</a>
+    <a href="https://github.com/weftsh/baste" class="block rounded-lg px-3 py-2 text-zinc-300 hover:bg-white/5">GitHub</a>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- Hero -->
+  <section class="relative isolate overflow-hidden">
+    <div class="bg-grid absolute inset-0 -z-10" aria-hidden="true"></div>
+    <div class="absolute inset-x-0 -top-40 -z-10 flex justify-center blur-3xl" aria-hidden="true">
+      <div class="aspect-[1.6] w-[56rem] bg-gradient-to-tr from-emerald-500/25 via-teal-400/10 to-cyan-400/20 opacity-70" style="clip-path: polygon(20% 0, 80% 0, 100% 45%, 70% 100%, 30% 100%, 0 45%)"></div>
+    </div>
+
+    <div class="mx-auto max-w-6xl px-4 pt-16 pb-20 sm:px-6 sm:pt-24 lg:pb-28">
+      <div class="mx-auto max-w-5xl text-center">
+        <a href="https://github.com/weftsh/baste" class="inline-flex items-center gap-2 rounded-full bg-white/5 px-3 py-1 text-sm text-zinc-300 ring-1 ring-white/10 hover:bg-white/10" data-cta="hero-pill">
+          <span class="rounded-full bg-emerald-400/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">Open source</span>
+          <span>Apache-2.0, on GitHub</span>
+          <svg viewBox="0 0 20 20" fill="currentColor" class="size-4 text-zinc-500" aria-hidden="true"><path fill-rule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
+        </a>
+        <h1 class="mt-8 text-4xl font-semibold tracking-tight text-balance text-white sm:text-5xl lg:text-[3.5rem] lg:leading-[1.1]">
+          <span class="lg:block">Run your GitHub Actions locally.</span>
+          <span class="bg-gradient-to-r from-emerald-300 to-teal-200 bg-clip-text text-transparent lg:block">Merge on the green check.</span>
+        </h1>
+        <p class="mx-auto mt-6 max-w-2xl text-lg text-pretty text-zinc-400 sm:text-xl">
+          Baste runs the workflows you already have in a fresh Linux VM on your machine every time you <code class="inline-code">git&nbsp;push</code>, then posts each job to GitHub as a check branch protection accepts. No queue, no workflow rewrites, no servers.
+        </p>
+
+        <div class="mx-auto mt-10 max-w-xl">
+          <div class="flex items-center gap-3 rounded-xl bg-zinc-900/80 py-2 pr-2 pl-4 text-left ring-1 ring-white/10 shadow-lg shadow-black/40">
+            <span class="font-mono text-sm text-emerald-400 select-none" aria-hidden="true">$</span>
+            <code class="min-w-0 flex-1 overflow-x-auto font-mono text-sm whitespace-nowrap text-zinc-100" id="install-hero">curl -fsSL https://raw.githubusercontent.com/weftsh/baste/main/install.sh | sh</code>
+            <button type="button" class="btn btn-primary shrink-0 px-3 py-2" data-copy="install-hero" data-cta="hero-copy">Copy</button>
+          </div>
+          <div class="mt-5 flex flex-wrap items-center justify-center gap-3">
+            <a href="#install" class="btn btn-secondary w-full sm:w-auto" data-cta="hero-start">
+              Get started in 5 commands
+              <svg viewBox="0 0 20 20" fill="currentColor" class="size-4" aria-hidden="true"><path fill-rule="evenodd" d="M3 10a.75.75 0 0 1 .75-.75h10.638L10.23 5.29a.75.75 0 1 1 1.04-1.08l5.5 5.25a.75.75 0 0 1 0 1.08l-5.5 5.25a.75.75 0 1 1-1.04-1.08l4.158-3.96H3.75A.75.75 0 0 1 3 10Z" clip-rule="evenodd"/></svg>
+            </a>
+            <a href="https://github.com/weftsh/baste" class="btn btn-secondary w-full sm:w-auto" data-cta="hero-github">
+              <svg viewBox="0 0 20 20" fill="currentColor" class="size-4 text-amber-300" aria-hidden="true"><path fill-rule="evenodd" d="M10.868 2.884c-.321-.772-1.415-.772-1.736 0l-1.83 4.401-4.753.381c-.833.067-1.171 1.107-.536 1.651l3.62 3.102-1.106 4.637c-.194.813.691 1.456 1.405 1.02L10 15.591l4.069 2.485c.713.436 1.598-.207 1.404-1.02l-1.106-4.637 3.62-3.102c.635-.544.297-1.584-.536-1.65l-4.752-.382-1.831-4.401Z" clip-rule="evenodd"/></svg>
+              Star on GitHub
+            </a>
+          </div>
+          <p class="mt-6 text-sm text-zinc-500">macOS on Apple Silicon, Linux, and Windows&nbsp;11 via WSL2. Uses your GitHub CLI login.</p>
+        </div>
+      </div>
+
+      <!-- Product visual -->
+      <div class="relative mx-auto mt-16 grid max-w-5xl gap-6 lg:mt-20 lg:grid-cols-5">
+        <div class="window lg:col-span-3" role="img" aria-label="A terminal: git push returns at once, and baste status shows the run's jobs running locally, with a Windows job handed to GitHub.">
+          <div class="window-bar">
+            <span class="window-dot"></span><span class="window-dot"></span><span class="window-dot"></span>
+            <span class="ml-3 font-mono text-xs text-zinc-500">~/acme/web</span>
+          </div>
+          <pre class="overflow-x-auto p-5 font-mono text-[13px] leading-6 text-zinc-300"><span class="text-emerald-400">$</span> git push
+<span class="text-zinc-500">To github.com:acme/web.git
+   4f1c2e9..a8d31b7  feature/login -&gt; feature/login</span>
+<span class="text-zinc-400">baste: running CI for a8d31b7 (feature/login) locally in run q7hz2m</span>
+
+<span class="text-emerald-400">$</span> baste status
+<span class="font-semibold text-white">q7hz2m</span>  <span class="text-amber-300">● running</span>  a8d31b7  feature/login  <span class="text-zinc-500">just now  push</span>
+   <span class="text-emerald-400">✓</span> CI / lint                41s
+   <span class="text-emerald-400">✓</span> CI / build             1m02s
+   <span class="pulse-dot text-amber-300">●</span> CI / test (node 22)    1m18s  <span class="text-zinc-500">running 'npm test'</span>
+   <span class="pulse-dot text-amber-300">●</span> CI / test (node 24)    1m16s  <span class="text-zinc-500">running 'npm test'</span>
+   <span class="text-cyan-300">→</span> CI / e2e (windows)            <span class="text-zinc-500">handed to GitHub</span></pre>
+        </div>
+
+        <div class="window self-start lg:col-span-2 lg:mt-12" role="img" aria-label="The pull request's checks on GitHub: the local jobs passed and are required.">
+          <div class="flex items-center gap-3 border-b border-white/5 px-5 py-4">
+            <span class="flex size-8 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-400">
+              <svg viewBox="0 0 20 20" fill="currentColor" class="size-5" aria-hidden="true"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd"/></svg>
+            </span>
+            <div>
+              <p class="text-sm font-semibold text-white">All checks have passed</p>
+              <p class="text-xs text-zinc-500">On the pull request, before a hosted runner starts</p>
+            </div>
+          </div>
+          <ul class="divide-y divide-white/5 text-sm">
+            <li class="flex items-start gap-3 px-5 py-3">
+              <svg viewBox="0 0 20 20" fill="currentColor" class="mt-0.5 size-4 shrink-0 text-emerald-400" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd"/></svg>
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-medium text-zinc-200">baste/CI/lint</p>
+                <p class="truncate text-xs text-zinc-500">Passed in 41s · baste logs q7hz2m</p>
+              </div>
+              <span class="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-zinc-400 ring-1 ring-white/10">Required</span>
+            </li>
+            <li class="flex items-start gap-3 px-5 py-3">
+              <svg viewBox="0 0 20 20" fill="currentColor" class="mt-0.5 size-4 shrink-0 text-emerald-400" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd"/></svg>
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-medium text-zinc-200">baste/CI/build</p>
+                <p class="truncate text-xs text-zinc-500">Passed in 1m02s · baste logs q7hz2m</p>
+              </div>
+              <span class="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-zinc-400 ring-1 ring-white/10">Required</span>
+            </li>
+            <li class="flex items-start gap-3 px-5 py-3">
+              <svg viewBox="0 0 20 20" fill="currentColor" class="mt-0.5 size-4 shrink-0 text-emerald-400" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd"/></svg>
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-medium text-zinc-200">baste/CI/test (node 22)</p>
+                <p class="truncate text-xs text-zinc-500">Passed in 2m04s · baste logs q7hz2m</p>
+              </div>
+              <span class="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-zinc-400 ring-1 ring-white/10">Required</span>
+            </li>
+            <li class="flex items-start gap-3 px-5 py-3">
+              <svg viewBox="0 0 20 20" fill="currentColor" class="mt-0.5 size-4 shrink-0 text-emerald-400" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd"/></svg>
+              <div class="min-w-0 flex-1">
+                <p class="truncate font-medium text-zinc-200">baste/CI/test (node 24)</p>
+                <p class="truncate text-xs text-zinc-500">Passed in 1m58s · baste logs q7hz2m</p>
+              </div>
+              <span class="rounded-full bg-white/5 px-2 py-0.5 text-[11px] text-zinc-400 ring-1 ring-white/10">Required</span>
+            </li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Works with -->
+  <section class="border-y border-white/5 bg-zinc-900/30" aria-label="Workflow features that run locally">
+    <div class="mx-auto flex max-w-6xl flex-col items-center gap-4 px-4 py-8 sm:px-6 lg:flex-row lg:gap-8">
+      <p class="shrink-0 text-sm font-medium text-zinc-400">Runs the workflow files you already have</p>
+      <ul class="flex flex-wrap justify-center gap-2 font-mono text-xs text-zinc-300 lg:justify-start">
+        <li class="rounded-md bg-white/5 px-2.5 py-1 ring-1 ring-white/10">actions/checkout</li>
+        <li class="rounded-md bg-white/5 px-2.5 py-1 ring-1 ring-white/10">actions/setup-node</li>
+        <li class="rounded-md bg-white/5 px-2.5 py-1 ring-1 ring-white/10">JavaScript actions</li>
+        <li class="rounded-md bg-white/5 px-2.5 py-1 ring-1 ring-white/10">composite actions</li>
+        <li class="rounded-md bg-white/5 px-2.5 py-1 ring-1 ring-white/10">Docker actions</li>
+        <li class="rounded-md bg-white/5 px-2.5 py-1 ring-1 ring-white/10">strategy.matrix</li>
+        <li class="rounded-md bg-white/5 px-2.5 py-1 ring-1 ring-white/10">needs:</li>
+        <li class="rounded-md bg-white/5 px-2.5 py-1 ring-1 ring-white/10">if:</li>
+        <li class="rounded-md bg-white/5 px-2.5 py-1 ring-1 ring-white/10">artifacts</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- Problem / comparison -->
+  <section class="mx-auto max-w-6xl px-4 py-24 sm:px-6 sm:py-32">
+    <div class="grid gap-12 lg:grid-cols-2 lg:gap-16">
+      <div>
+        <p class="eyebrow">Why Baste</p>
+        <h2 class="section-title">Cloud CI is rented and queued. Your laptop is mostly idle.</h2>
+        <p class="section-lead">Every push waits for a hosted runner, then bills you for the minutes. Local tools have only ever solved half of that: they run something on your machine, but either not your real workflow or not in a way GitHub will accept.</p>
+        <p class="mt-4 text-lg text-pretty text-zinc-400">Baste does both. It runs the jobs in <code class="inline-code">.github/workflows</code> in a runner-like VM, and reports each one to GitHub as a check you can make required.</p>
+      </div>
+      <div class="self-start overflow-x-auto rounded-2xl ring-1 ring-white/10 lg:self-center">
+        <table class="w-full text-left text-xs sm:text-sm">
+          <caption class="sr-only">How Baste compares with other local CI tools</caption>
+          <thead class="bg-zinc-900/80 text-xs text-zinc-400">
+            <tr>
+              <th scope="col" class="px-3 py-3 font-medium sm:px-4"></th>
+              <th scope="col" class="px-2 py-3 text-center sm:px-3 font-medium">act</th>
+              <th scope="col" class="px-2 py-3 text-center sm:px-3 font-medium">gh-signoff</th>
+              <th scope="col" class="bg-emerald-400/10 px-2 py-3 text-center sm:px-3 font-semibold text-emerald-300">Baste</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-white/5">
+            <tr>
+              <th scope="row" class="px-3 py-4 font-normal text-zinc-300 sm:px-4">Runs the jobs in your workflow files</th>
+              <td class="px-2 py-4 text-center sm:px-3"><span class="text-emerald-400" aria-label="Yes">✓</span></td>
+              <td class="px-2 py-4 text-center sm:px-3 text-xs text-zinc-500">A script you choose</td>
+              <td class="bg-emerald-400/5 px-2 py-4 text-center sm:px-3"><span class="text-emerald-400" aria-label="Yes">✓</span></td>
+            </tr>
+            <tr>
+              <th scope="row" class="px-3 py-4 font-normal text-zinc-300 sm:px-4">Each job in a fresh, runner-like VM</th>
+              <td class="px-2 py-4 text-center sm:px-3 text-xs text-zinc-500">Docker on your host</td>
+              <td class="px-2 py-4 text-center sm:px-3"><span class="text-zinc-600" aria-label="No">–</span></td>
+              <td class="bg-emerald-400/5 px-2 py-4 text-center sm:px-3"><span class="text-emerald-400" aria-label="Yes">✓</span></td>
+            </tr>
+            <tr>
+              <th scope="row" class="px-3 py-4 font-normal text-zinc-300 sm:px-4">Result shows up on the commit in GitHub</th>
+              <td class="px-2 py-4 text-center sm:px-3"><span class="text-zinc-600" aria-label="No">–</span></td>
+              <td class="px-2 py-4 text-center sm:px-3"><span class="text-emerald-400" aria-label="Yes">✓</span></td>
+              <td class="bg-emerald-400/5 px-2 py-4 text-center sm:px-3"><span class="text-emerald-400" aria-label="Yes">✓</span></td>
+            </tr>
+            <tr>
+              <th scope="row" class="px-3 py-4 font-normal text-zinc-300 sm:px-4">Starts on <code class="inline-code">git push</code>, in the background</th>
+              <td class="px-2 py-4 text-center sm:px-3 text-xs text-zinc-500">You run it</td>
+              <td class="px-2 py-4 text-center sm:px-3 text-xs text-zinc-500">You run it</td>
+              <td class="bg-emerald-400/5 px-2 py-4 text-center sm:px-3"><span class="text-emerald-400" aria-label="Yes">✓</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section id="how" class="border-t border-white/5 bg-zinc-900/20">
+    <div class="mx-auto max-w-6xl px-4 py-24 sm:px-6 sm:py-32">
+      <div class="mx-auto max-w-2xl text-center">
+        <p class="eyebrow">How it works</p>
+        <h2 class="section-title">Set it up once. Then just push.</h2>
+        <p class="section-lead">No new workflow syntax, no runner to host, no change to how you work.</p>
+      </div>
+      <ol class="mt-16 grid gap-6 lg:grid-cols-3">
+        <li class="card relative">
+          <span class="flex size-9 items-center justify-center rounded-full bg-emerald-400/15 font-mono text-sm font-semibold text-emerald-300">1</span>
+          <h3 class="mt-5 text-lg font-semibold text-white">Install and run <code class="font-mono text-base">baste init</code></h3>
+          <p class="mt-2 text-zinc-400">It checks virtualization, your GitHub CLI login and that your token can write commit statuses, then installs a pre-push hook. If anything is missing, it says what and changes nothing.</p>
+        </li>
+        <li class="card relative">
+          <span class="flex size-9 items-center justify-center rounded-full bg-emerald-400/15 font-mono text-sm font-semibold text-emerald-300">2</span>
+          <h3 class="mt-5 text-lg font-semibold text-white">Push like you always do</h3>
+          <p class="mt-2 text-zinc-400"><code class="inline-code">git push</code> returns right away. Within seconds each local job shows as pending on the commit, and boots a fresh VM that checks out exactly what you pushed, not your working tree.</p>
+        </li>
+        <li class="card relative">
+          <span class="flex size-9 items-center justify-center rounded-full bg-emerald-400/15 font-mono text-sm font-semibold text-emerald-300">3</span>
+          <h3 class="mt-5 text-lg font-semibold text-white">Merge on the green check</h3>
+          <p class="mt-2 text-zinc-400">Each job's check turns green or red with its duration and run id. Make the <code class="inline-code">baste/…</code> checks required, and pull requests merge on a local pass.</p>
+        </li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section id="features" class="mx-auto max-w-6xl px-4 py-24 sm:px-6 sm:py-32">
+    <div class="mx-auto max-w-2xl text-center">
+      <p class="eyebrow">Features</p>
+      <h2 class="section-title">A local pass you can trust to predict GitHub's</h2>
+      <p class="section-lead">Fidelity first: Baste runs what it can run faithfully, and hands the rest to GitHub before the run starts.</p>
+    </div>
+    <div class="mt-16 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <div class="card lg:col-span-2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-7 text-emerald-400" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25M3 7.5l9 5.25M3 7.5v9l9 5.25m0-9v9"/></svg>
+        <h3 class="mt-4 font-semibold text-white">A fresh VM for every job</h3>
+        <p class="mt-2 text-sm text-zinc-400">Each job boots a copy-on-write clone of a pinned Ubuntu 24.04 image, as the <code class="inline-code">runner</code> user with passwordless sudo and Docker. Nothing leaks between runs, and nothing depends on what's installed on your laptop.</p>
+      </div>
+      <div class="card lg:col-span-2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-7 text-emerald-400" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"/></svg>
+        <h3 class="mt-4 font-semibold text-white">Checks GitHub accepts</h3>
+        <p class="mt-2 text-sm text-zinc-400">One commit status per job, with a stable name like <code class="inline-code">baste/CI/test</code> that works as a required check in branch protection and rulesets.</p>
+      </div>
+      <div class="card">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-7 text-emerald-400" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m3.75 13.5 10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75Z"/></svg>
+        <h3 class="mt-4 font-semibold text-white">Never blocks a push</h3>
+        <p class="mt-2 text-sm text-zinc-400">The hook starts the run in the background and returns. A newer push to the same branch cancels the older run.</p>
+      </div>
+      <div class="card">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-7 text-emerald-400" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 0 0 3 8.25v10.5A2.25 2.25 0 0 0 5.25 21h10.5A2.25 2.25 0 0 0 18 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/></svg>
+        <h3 class="mt-4 font-semibold text-white">Honest hand-offs</h3>
+        <p class="mt-2 text-sm text-zinc-400">Windows, macOS and service-container jobs are listed as handed to GitHub before the run starts. Never half-run.</p>
+      </div>
+      <div class="card">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-7 text-emerald-400" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z"/></svg>
+        <h3 class="mt-4 font-semibold text-white">Secrets in your keychain</h3>
+        <p class="mt-2 text-sm text-zinc-400">Secrets come from the macOS Keychain or Secret Service, never from GitHub. A missing one fails the job by name.</p>
+      </div>
+      <div class="card">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-7 text-emerald-400" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="m6.75 7.5 3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0 0 21 18V6a2.25 2.25 0 0 0-2.25-2.25H5.25A2.25 2.25 0 0 0 3 6v12a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
+        <h3 class="mt-4 font-semibold text-white">Live logs, one-command reruns</h3>
+        <p class="mt-2 text-sm text-zinc-400"><code class="inline-code">baste logs latest</code> streams each step as it runs. <code class="inline-code">baste rerun</code> re-checks the same commit.</p>
+      </div>
+      <div class="card lg:col-span-2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-7 text-emerald-400" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"/></svg>
+        <h3 class="mt-4 font-semibold text-white">Insights that justify the switch</h3>
+        <p class="mt-2 text-sm text-zinc-400">Time per step, the slowest steps, and how long the same workflow last took on GitHub-hosted runners, at the end of every run and in <code class="inline-code">baste insights</code>.</p>
+      </div>
+      <div class="card lg:col-span-2">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="size-7 text-emerald-400" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 1 0-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 0 0 2.25-2.25v-6.75a2.25 2.25 0 0 0-2.25-2.25H6.75a2.25 2.25 0 0 0-2.25 2.25v6.75a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
+        <h3 class="mt-4 font-semibold text-white">Zero infrastructure</h3>
+        <p class="mt-2 text-sm text-zinc-400">Your machine does the work and GitHub is the only backend. Baste uses the token from <code class="inline-code">gh auth token</code> and never stores one. Logs stay on your machine.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Merge gates -->
+  <section id="merge" class="border-t border-white/5 bg-zinc-900/20">
+    <div class="mx-auto grid max-w-6xl gap-12 px-4 py-24 sm:px-6 sm:py-32 lg:grid-cols-2 lg:gap-16">
+      <div>
+        <p class="eyebrow">Merge gates</p>
+        <h2 class="section-title">Merge on a local pass. Two ways.</h2>
+        <dl class="mt-10 space-y-8">
+          <div class="relative pl-10">
+            <dt class="font-semibold text-white">
+              <span class="absolute top-0.5 left-0 flex size-6 items-center justify-center rounded-md bg-emerald-400/15 text-xs text-emerald-300">A</span>
+              Required check <span class="ml-2 rounded-full bg-white/5 px-2 py-0.5 text-xs font-normal text-zinc-400 ring-1 ring-white/10">Default</span>
+            </dt>
+            <dd class="mt-2 text-zinc-400">Require the <code class="inline-code">baste/&lt;workflow&gt;/&lt;job&gt;</code> checks that <code class="inline-code">baste init</code> lists, and make the GitHub-hosted versions optional. No workflow edits.</dd>
+          </div>
+          <div class="relative pl-10">
+            <dt class="font-semibold text-white">
+              <span class="absolute top-0.5 left-0 flex size-6 items-center justify-center rounded-md bg-emerald-400/15 text-xs text-emerald-300">B</span>
+              The gate action <span class="ml-2 rounded-full bg-white/5 px-2 py-0.5 text-xs font-normal text-zinc-400 ring-1 ring-white/10">Opt-in</span>
+            </dt>
+            <dd class="mt-2 text-zinc-400">Add one job to a workflow. When Baste already passed the commit locally, the GitHub-hosted jobs skip and the workflow passes in seconds, saving the Actions minutes. With no local result, everything runs on GitHub as usual.</dd>
+          </div>
+        </dl>
+      </div>
+      <div class="window self-center">
+        <div class="window-bar">
+          <span class="window-dot"></span><span class="window-dot"></span><span class="window-dot"></span>
+          <span class="ml-3 font-mono text-xs text-zinc-500">.github/workflows/ci.yml</span>
+        </div>
+        <pre class="overflow-x-auto p-5 font-mono text-[13px] leading-6 text-zinc-300"><span class="text-sky-300">jobs</span>:
+  <span class="text-sky-300">baste-gate</span>:
+    <span class="text-sky-300">runs-on</span>: ubuntu-latest
+    <span class="text-sky-300">outputs</span>:
+      <span class="text-sky-300">skip</span>: <span class="text-amber-200">${{ steps.gate.outputs.skip }}</span>
+    <span class="text-sky-300">steps</span>:
+      - <span class="text-sky-300">id</span>: gate
+        <span class="text-sky-300">uses</span>: <span class="text-emerald-300">weftsh/baste/gate@v1</span>
+
+  <span class="text-sky-300">test</span>:
+    <span class="text-sky-300">needs</span>: baste-gate
+    <span class="text-sky-300">if</span>: <span class="text-amber-200">needs.baste-gate.outputs.skip != 'true'</span>
+    <span class="text-sky-300">runs-on</span>: ubuntu-latest
+    <span class="text-zinc-500"># ...your steps, unchanged</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- Platforms and compatibility -->
+  <section class="mx-auto max-w-6xl px-4 py-24 sm:px-6 sm:py-32">
+    <div class="mx-auto max-w-2xl text-center">
+      <p class="eyebrow">Runs where you work</p>
+      <h2 class="section-title">A real VM on every major desktop</h2>
+      <p class="section-lead">Linux jobs run locally on every host. Baste picks the VM backend for your machine.</p>
+    </div>
+    <div class="mt-16 grid gap-6 md:grid-cols-3">
+      <div class="card">
+        <p class="text-sm font-medium text-emerald-300">macOS 14+</p>
+        <h3 class="mt-1 text-lg font-semibold text-white">Apple Silicon</h3>
+        <p class="mt-2 text-sm text-zinc-400">Linux VMs through <a class="text-zinc-200 underline decoration-white/20 underline-offset-4 hover:decoration-emerald-400" href="https://tart.run">Tart</a>, with Rosetta running x86_64 binaries and images.</p>
+      </div>
+      <div class="card">
+        <p class="text-sm font-medium text-emerald-300">x86_64 and arm64</p>
+        <h3 class="mt-1 text-lg font-semibold text-white">Linux</h3>
+        <p class="mt-2 text-sm text-zinc-400"><a class="text-zinc-200 underline decoration-white/20 underline-offset-4 hover:decoration-emerald-400" href="https://firecracker-microvm.github.io">Firecracker</a> microVMs on KVM that boot in seconds.</p>
+      </div>
+      <div class="card">
+        <p class="text-sm font-medium text-emerald-300">Windows 11</p>
+        <h3 class="mt-1 text-lg font-semibold text-white">WSL2</h3>
+        <p class="mt-2 text-sm text-zinc-400">Firecracker inside WSL2, with nested virtualization turned on.</p>
+      </div>
+    </div>
+
+    <div class="mt-6 grid gap-6 md:grid-cols-2">
+      <div class="card">
+        <h3 class="flex items-center gap-2 font-semibold text-white">
+          <svg viewBox="0 0 20 20" fill="currentColor" class="size-5 text-emerald-400" aria-hidden="true"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm3.857-9.809a.75.75 0 0 0-1.214-.882l-3.483 4.79-1.88-1.88a.75.75 0 1 0-1.06 1.061l2.5 2.5a.75.75 0 0 0 1.137-.089l4-5.5Z" clip-rule="evenodd"/></svg>
+          Runs locally
+        </h3>
+        <ul class="mt-4 grid gap-2 text-sm text-zinc-400 sm:grid-cols-2">
+          <li><code class="inline-code">runs-on: ubuntu-*</code> jobs</li>
+          <li><code class="inline-code">push</code> and <code class="inline-code">pull_request</code></li>
+          <li>JavaScript, composite, Docker actions</li>
+          <li>Matrices, <code class="inline-code">needs</code>, <code class="inline-code">if</code>, outputs</li>
+          <li>Artifacts between jobs</li>
+          <li>Step summaries and annotations</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 class="flex items-center gap-2 font-semibold text-white">
+          <svg viewBox="0 0 20 20" fill="currentColor" class="size-5 text-cyan-300" aria-hidden="true"><path fill-rule="evenodd" d="M2 10a8 8 0 1 1 16 0 8 8 0 0 1-16 0Zm4.75-.75a.75.75 0 0 0 0 1.5h4.69l-1.72 1.72a.75.75 0 1 0 1.06 1.06l3-3a.75.75 0 0 0 0-1.06l-3-3a.75.75 0 1 0-1.06 1.06l1.72 1.72H6.75Z" clip-rule="evenodd"/></svg>
+          Handed to GitHub
+        </h3>
+        <ul class="mt-4 grid gap-2 text-sm text-zinc-400 sm:grid-cols-2">
+          <li>Windows and macOS jobs</li>
+          <li>Self-hosted runners</li>
+          <li><code class="inline-code">services:</code> and <code class="inline-code">container:</code></li>
+          <li>Deployments (<code class="inline-code">environment:</code>)</li>
+          <li>OIDC (<code class="inline-code">id-token: write</code>)</li>
+          <li>Reusable workflows</li>
+        </ul>
+      </div>
+    </div>
+    <p class="mt-6 text-center text-sm text-zinc-500">The full list is in the <a class="text-zinc-300 underline decoration-white/20 underline-offset-4 hover:decoration-emerald-400" href="https://github.com/weftsh/baste/blob/main/docs/compatibility.md">compatibility guide</a>. Intel Macs aren't supported.</p>
+  </section>
+
+  <!-- Install -->
+  <section id="install" class="relative isolate overflow-hidden border-t border-white/5 bg-zinc-900/20">
+    <div class="absolute inset-x-0 top-1/2 -z-10 flex -translate-y-1/2 justify-center blur-3xl" aria-hidden="true">
+      <div class="aspect-[2] w-[48rem] rounded-full bg-gradient-to-tr from-emerald-500/15 to-teal-300/5"></div>
+    </div>
+    <div class="mx-auto grid max-w-6xl gap-12 px-4 py-24 sm:px-6 sm:py-32 lg:grid-cols-2 lg:gap-16">
+      <div>
+        <p class="eyebrow">Get started</p>
+        <h2 class="section-title">Your first local check in a few minutes</h2>
+        <p class="section-lead">One binary. It needs the <a class="text-zinc-200 underline decoration-white/20 underline-offset-4 hover:decoration-emerald-400" href="https://cli.github.com">GitHub CLI</a>, logged in with <code class="inline-code">gh auth login</code>.</p>
+        <ul class="mt-8 space-y-3 text-zinc-400">
+          <li class="flex gap-3"><svg viewBox="0 0 20 20" fill="currentColor" class="mt-1 size-5 shrink-0 text-emerald-400" aria-hidden="true"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd"/></svg>Free and open source under Apache-2.0</li>
+          <li class="flex gap-3"><svg viewBox="0 0 20 20" fill="currentColor" class="mt-1 size-5 shrink-0 text-emerald-400" aria-hidden="true"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd"/></svg>No account, no server, no workflow changes</li>
+          <li class="flex gap-3"><svg viewBox="0 0 20 20" fill="currentColor" class="mt-1 size-5 shrink-0 text-emerald-400" aria-hidden="true"><path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clip-rule="evenodd"/></svg><code class="inline-code">baste uninstall</code> removes the hook and statuses stop</li>
+        </ul>
+      </div>
+      <div class="window self-center">
+        <div class="window-bar">
+          <span class="window-dot"></span><span class="window-dot"></span><span class="window-dot"></span>
+          <span class="ml-3 font-mono text-xs text-zinc-500">Terminal</span>
+          <button type="button" class="ml-auto rounded-md px-2 py-1 text-xs font-medium text-zinc-400 ring-1 ring-white/10 hover:bg-white/5 hover:text-white" data-copy="install-hero" data-cta="install-copy">Copy install command</button>
+        </div>
+        <pre class="overflow-x-auto p-5 font-mono text-[13px] leading-7 text-zinc-300"><code><span class="text-zinc-500"># install</span>
+curl -fsSL https://raw.githubusercontent.com/weftsh/baste/main/install.sh \
+  | sh
+
+<span class="text-zinc-500"># in your repository</span>
+baste init
+git push
+baste status
+baste logs latest</code></pre>
+      </div>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section id="faq" class="mx-auto max-w-3xl px-4 py-24 sm:px-6 sm:py-32">
+    <div class="text-center">
+      <p class="eyebrow">FAQ</p>
+      <h2 class="section-title">Questions teams ask first</h2>
+    </div>
+    <div class="mt-12 divide-y divide-white/10 border-y border-white/10">
+      <details class="group py-5" open>
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-6 font-medium text-white [&::-webkit-details-marker]:hidden">
+          Do I need to change my workflows?
+          <span class="text-zinc-500 transition-transform group-open:rotate-45" aria-hidden="true">+</span>
+        </summary>
+        <p class="mt-3 text-zinc-400">No. Baste reads the workflows at the commit you pushed and runs the <code class="inline-code">ubuntu-*</code> jobs as they are. The optional gate action is the only edit, and only if you want GitHub to skip jobs that already passed locally.</p>
+      </details>
+      <details class="group py-5">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-6 font-medium text-white [&::-webkit-details-marker]:hidden">
+          Does my code leave my machine?
+          <span class="text-zinc-500 transition-transform group-open:rotate-45" aria-hidden="true">+</span>
+        </summary>
+        <p class="mt-3 text-zinc-400">Only the commit statuses go to GitHub. The checkout comes from your local repository, and logs, artifacts and insights stay on your machine. Jobs still reach the network the way they would on GitHub, for example to install dependencies.</p>
+      </details>
+      <details class="group py-5">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-6 font-medium text-white [&::-webkit-details-marker]:hidden">
+          What happens to jobs Baste can't run?
+          <span class="text-zinc-500 transition-transform group-open:rotate-45" aria-hidden="true">+</span>
+        </summary>
+        <p class="mt-3 text-zinc-400">They're listed as handed to GitHub before the run starts and get no local status, so GitHub keeps running them as usual. A job that needs one of them is handed over too.</p>
+      </details>
+      <details class="group py-5">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-6 font-medium text-white [&::-webkit-details-marker]:hidden">
+          Can a teammate fake a green check?
+          <span class="text-zinc-500 transition-transform group-open:rotate-45" aria-hidden="true">+</span>
+        </summary>
+        <p class="mt-3 text-zinc-400">Statuses are posted with each developer's own GitHub token, so anyone with write access could post one by hand, just as they could today. Baste is built for small, trusted teams. Signed attestations are on the roadmap; if you need separation of duties, keep CI on GitHub.</p>
+      </details>
+      <details class="group py-5">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-6 font-medium text-white [&::-webkit-details-marker]:hidden">
+          How is this different from act?
+          <span class="text-zinc-500 transition-transform group-open:rotate-45" aria-hidden="true">+</span>
+        </summary>
+        <p class="mt-3 text-zinc-400">act runs workflows in Docker containers on your host, and its results stay on your machine. Baste runs each job in a fresh VM built like a hosted runner, starts on push, and reports to GitHub so the result can gate a merge.</p>
+      </details>
+      <details class="group py-5">
+        <summary class="flex cursor-pointer list-none items-center justify-between gap-6 font-medium text-white [&::-webkit-details-marker]:hidden">
+          What does it cost?
+          <span class="text-zinc-500 transition-transform group-open:rotate-45" aria-hidden="true">+</span>
+        </summary>
+        <p class="mt-3 text-zinc-400">Nothing. Baste is open source under Apache-2.0 and runs on hardware you already have. Jobs that pass locally don't need to use GitHub Actions minutes.</p>
+      </details>
+    </div>
+  </section>
+
+  <!-- Final CTA -->
+  <section class="px-4 pb-24 sm:px-6 sm:pb-32">
+    <div class="relative isolate mx-auto max-w-5xl overflow-hidden rounded-3xl bg-gradient-to-br from-emerald-500/20 via-zinc-900 to-zinc-900 px-6 py-16 text-center ring-1 ring-emerald-400/20 sm:px-16">
+      <h2 class="text-3xl font-semibold tracking-tight text-balance text-white sm:text-4xl">Stop waiting on the queue.</h2>
+      <p class="mx-auto mt-4 max-w-xl text-lg text-pretty text-zinc-300">Install Baste, run <code class="inline-code">baste init</code>, and your next push is checked on your own machine.</p>
+      <div class="mt-8 flex flex-wrap items-center justify-center gap-3">
+        <a href="#install" class="btn btn-primary" data-cta="footer-install">Install Baste</a>
+        <a href="https://github.com/weftsh/baste" class="btn btn-secondary" data-cta="footer-github">View on GitHub</a>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer class="border-t border-white/5">
+  <div class="mx-auto flex max-w-6xl flex-col gap-8 px-4 py-12 sm:px-6 md:flex-row md:items-start md:justify-between">
+    <div class="max-w-sm">
+      <a href="./" class="flex items-center gap-2.5 font-semibold text-white">
+        <img src="favicon.svg" alt="" class="size-6" width="24" height="24">
+        Baste
+      </a>
+      <p class="mt-3 text-sm text-zinc-500">A basting stitch is the temporary one sewn before the final seam, the way a local check comes before the merge.</p>
+    </div>
+    <nav class="grid grid-cols-2 gap-x-12 gap-y-2 text-sm" aria-label="Footer">
+      <a href="https://github.com/weftsh/baste" class="text-zinc-400 hover:text-white">GitHub</a>
+      <a href="https://github.com/weftsh/baste#readme" class="text-zinc-400 hover:text-white">Documentation</a>
+      <a href="https://github.com/weftsh/baste/releases" class="text-zinc-400 hover:text-white">Releases</a>
+      <a href="https://github.com/weftsh/baste/blob/main/docs/compatibility.md" class="text-zinc-400 hover:text-white">Compatibility</a>
+      <a href="https://github.com/weftsh/baste/issues" class="text-zinc-400 hover:text-white">Issues</a>
+      <a href="https://github.com/weftsh/baste/blob/main/LICENSE" class="text-zinc-400 hover:text-white">License</a>
+    </nav>
+  </div>
+  <div class="border-t border-white/5">
+    <p class="mx-auto max-w-6xl px-4 py-6 text-xs text-zinc-600 sm:px-6">Baste is open source under the Apache License 2.0. GitHub and GitHub Actions are trademarks of GitHub, Inc. Baste is not affiliated with GitHub.</p>
+  </div>
+</footer>
+
+<script src="assets/site.js" defer></script>
+</body>
+</html>

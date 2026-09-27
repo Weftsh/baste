@@ -21,6 +21,8 @@ VM changes have their own checks:
 - `scripts/firecracker-e2e.sh` runs a real workflow through Firecracker. It needs KVM and `sudo baste setup-network`.
 - For the Tart backend, test by hand on an Apple Silicon Mac: `baste image prepare --backend tart`, then `baste run` in a repository.
 
+The website lives in `site/`: plain HTML in `site/public/` styled with Tailwind CSS v4, built with `npm ci && npm run build` and checked with `npm run check`. `npm run dev` rebuilds the stylesheet as you edit. The Pages workflow publishes it from `main`. Keep claims on the site to what Baste does today. `site/src/og.html` is the source of `site/public/og.png`, the link preview image.
+
 Guest code must build as a static binary:
 
 ```sh

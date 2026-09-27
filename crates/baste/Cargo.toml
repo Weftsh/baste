@@ -1,10 +1,13 @@
 [package]
 name = "baste"
 description = "Run your GitHub Actions workflows locally in a pinned VM and report the result to GitHub"
+keywords = ["github-actions", "ci", "continuous-integration", "local-ci", "firecracker"]
+categories = ["command-line-utilities", "development-tools"]
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
+homepage.workspace = true
 rust-version.workspace = true
 
 [[bin]]

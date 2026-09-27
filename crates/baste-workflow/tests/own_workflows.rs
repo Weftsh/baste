@@ -28,6 +28,7 @@ fn ci_workflow() {
     let p = placements(&wf);
     assert!(p.contains(&("Test (Linux)".into(), true)), "{p:?}");
     assert!(p.contains(&("Test (macOS)".into(), false)), "{p:?}");
+    assert!(p.contains(&("Website".into(), true)), "{p:?}");
 }
 
 #[test]
@@ -37,9 +38,13 @@ fn release_and_pages_workflows() {
     assert!(!wf.on.matches_push("refs/heads/main", None).unwrap());
     let p = placements(&wf);
     assert_eq!(p.iter().filter(|(_, local)| *local).count(), 3, "{p:?}");
-    let pages = load(".github/workflows/pages.yml");
-    // Deploys to an environment, so it stays on GitHub.
-    assert!(placements(&pages).iter().all(|(_, local)| !local));
+    let pages = placements(&load(".github/workflows/pages.yml"));
+    // The site builds locally; the deployment uses an environment, so it
+    // stays on GitHub.
+    assert_eq!(
+        pages,
+        vec![("build".to_string(), true), ("deploy".to_string(), false)]
+    );
 }
 
 #[test]

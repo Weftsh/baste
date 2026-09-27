@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+@source "../public";
+
+@font-face {
+  font-family: "Inter";
+  src: url("fonts/inter-latin-wght-normal.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, "JetBrains Mono", Menlo, Consolas, monospace;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem;
+    color-scheme: dark;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
+  }
+  body {
+    @apply bg-zinc-950 font-sans text-zinc-300 antialiased;
+    /* Inter's contextual alternates turn "3x9" into "3×9", which garbles
+       run ids and hashes. */
+    font-feature-settings: "calt" 0;
+  }
+  ::selection {
+    @apply bg-emerald-400/30 text-white;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-emerald-400;
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors;
+  }
+  .btn-primary {
+    @apply bg-emerald-400 text-zinc-950 shadow-lg shadow-emerald-500/20 hover:bg-emerald-300;
+  }
+  .btn-secondary {
+    @apply bg-white/5 text-white ring-1 ring-white/10 ring-inset hover:bg-white/10;
+  }
+  .eyebrow {
+    @apply font-mono text-xs font-medium tracking-widest text-emerald-400 uppercase;
+  }
+  .section-title {
+    @apply mt-3 text-3xl font-semibold tracking-tight text-balance text-white sm:text-4xl;
+  }
+  .section-lead {
+    @apply mt-4 text-lg text-pretty text-zinc-400;
+  }
+  .card {
+    @apply rounded-2xl bg-zinc-900/60 p-6 ring-1 ring-white/10;
+  }
+  .inline-code {
+    @apply rounded bg-white/5 px-1.5 py-0.5 font-mono whitespace-nowrap text-[0.85em] text-zinc-200 ring-1 ring-white/10;
+  }
+  .window {
+    @apply overflow-hidden rounded-xl bg-zinc-900 shadow-2xl ring-1 shadow-black/50 ring-white/10;
+  }
+  .window-bar {
+    @apply flex items-center gap-2 border-b border-white/5 bg-zinc-900 px-4 py-3;
+  }
+  .window-dot {
+    @apply size-3 rounded-full bg-zinc-700;
+  }
+}
+
+/* A faint grid behind the hero, fading out toward the edges. */
+.bg-grid {
+  background-image:
+    linear-gradient(to right, rgb(255 255 255 / 0.04) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(255 255 255 / 0.04) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 0%, black 40%, transparent 100%);
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .pulse-dot {
+    animation: pulse-dot 1.6s ease-in-out infinite;
+  }
+}
+@keyframes pulse-dot {
+  50% { opacity: 0.35; }
+}
