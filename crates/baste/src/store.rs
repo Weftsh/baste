@@ -8,7 +8,7 @@ use anyhow::{anyhow, bail, Context, Result};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 pub const RECORD_VERSION: u32 = 1;
 const ID_ALPHABET: &[u8] = b"23456789abcdefghjkmnpqrstuvwxyz";
@@ -335,10 +335,6 @@ impl Store {
         Store::new(git.common_dir.join("baste"))
     }
 
-    pub fn root(&self) -> &Path {
-        &self.root
-    }
-
     pub fn runs_dir(&self) -> PathBuf {
         self.root.join("runs")
     }
@@ -373,7 +369,8 @@ impl Store {
 
     pub fn load(&self, id: &str) -> Result<Run> {
         let path = self.run_dir(id).join("run.json");
-        let text = std::fs::read_to_string(&path).with_context(|| format!("run '{id}' not found"))?;
+        let text =
+            std::fs::read_to_string(&path).with_context(|| format!("run '{id}' not found"))?;
         serde_json::from_str(&text).with_context(|| format!("parsing {}", path.display()))
     }
 
@@ -416,7 +413,9 @@ impl Store {
         if by_id.len() > 1 {
             bail!("'{query}' matches several runs; use more characters");
         }
-        Err(anyhow!("no run '{query}'. See `baste status` for recent runs."))
+        Err(anyhow!(
+            "no run '{query}'. See `baste status` for recent runs."
+        ))
     }
 
     /// Relative log path of a step within its job directory.
@@ -469,9 +468,21 @@ mod tests {
         let store = Store::new(d.path().to_path_buf());
         let id = store.new_id();
         assert_eq!(id.len(), 6);
-        let run = Run::new(id.clone(), repo(), "abcdef1234".into(), "refs/heads/main".into(), Trigger::Push);
+        let run = Run::new(
+            id.clone(),
+            repo(),
+            "abcdef1234".into(),
+            "refs/heads/main".into(),
+            Trigger::Push,
+        );
         store.save(&run).unwrap();
-        let mut second = Run::new(store.new_id(), repo(), "99887766".into(), "refs/heads/x".into(), Trigger::Manual);
+        let mut second = Run::new(
+            store.new_id(),
+            repo(),
+            "99887766".into(),
+            "refs/heads/x".into(),
+            Trigger::Manual,
+        );
         second.created_at = run.created_at + chrono::Duration::seconds(5);
         store.save(&second).unwrap();
         assert_eq!(store.resolve(&id).unwrap().id, id);
@@ -484,6 +495,9 @@ mod tests {
 
     #[test]
     fn slugs() {
-        assert_eq!(slug("CI / test (ubuntu-latest, 20)"), "ci-test-ubuntu-latest-20");
+        assert_eq!(
+            slug("CI / test (ubuntu-latest, 20)"),
+            "ci-test-ubuntu-latest-20"
+        );
     }
 }

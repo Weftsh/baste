@@ -20,7 +20,10 @@ pub fn agent_binary(arch: &str) -> Result<PathBuf> {
     {
         let p = PathBuf::from(p);
         if !p.is_file() {
-            bail!("BASTE_AGENT_BIN points to {}, which doesn't exist", p.display());
+            bail!(
+                "BASTE_AGENT_BIN points to {}, which doesn't exist",
+                p.display()
+            );
         }
         return Ok(p);
     }

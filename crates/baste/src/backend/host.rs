@@ -49,13 +49,20 @@ impl Backend for HostBackend {
     }
 
     fn runner(&self, job_dir: &Path) -> RunnerInfo {
-        let os = if cfg!(target_os = "macos") { "macOS" } else { "Linux" };
+        let os = if cfg!(target_os = "macos") {
+            "macOS"
+        } else {
+            "Linux"
+        };
         RunnerInfo {
             os: os.into(),
             arch: runner_arch(std::env::consts::ARCH),
             name: format!("baste-host-{}", crate::sys::hostname()),
             work_root: job_dir.join("work").display().to_string(),
-            tool_cache: crate::config::cache_dir().join("toolcache").display().to_string(),
+            tool_cache: crate::config::cache_dir()
+                .join("toolcache")
+                .display()
+                .to_string(),
             user: None,
             node: Map::new(),
             docker_platform: None,
@@ -108,7 +115,10 @@ impl Backend for HostBackend {
         let (tx, rx) = std::sync::mpsc::channel::<String>();
         let err_thread = std::thread::spawn(move || {
             use std::io::BufRead;
-            for line in std::io::BufReader::new(stderr).lines().map_while(Result::ok) {
+            for line in std::io::BufReader::new(stderr)
+                .lines()
+                .map_while(Result::ok)
+            {
                 let _ = tx.send(line);
             }
         });

@@ -35,12 +35,21 @@ impl ActionCache {
     }
 
     /// Directory holding `owner/repo` at `git_ref`, downloading it if needed.
-    pub fn ensure(&self, owner: &str, repo: &str, git_ref: &str, log: &mut dyn FnMut(&str)) -> Result<PathBuf> {
+    pub fn ensure(
+        &self,
+        owner: &str,
+        repo: &str,
+        git_ref: &str,
+        log: &mut dyn FnMut(&str),
+    ) -> Result<PathBuf> {
         let key = format!("{owner}/{repo}@{git_ref}").to_ascii_lowercase();
         if let Some(p) = self.resolved.lock().unwrap().get(&key) {
             return Ok(p.clone());
         }
-        let base = self.dir.join(owner.to_ascii_lowercase()).join(repo.to_ascii_lowercase());
+        let base = self
+            .dir
+            .join(owner.to_ascii_lowercase())
+            .join(repo.to_ascii_lowercase());
         let ref_file = base.join("refs").join(crate::store::slug(git_ref));
         let is_sha = git_ref.len() == 40 && git_ref.chars().all(|c| c.is_ascii_hexdigit());
         let sha = if is_sha {
@@ -62,13 +71,18 @@ impl ActionCache {
                         log(&format!("Using cached {owner}/{repo}@{git_ref} ({e})"));
                         s.trim().to_string()
                     }
-                    Err(_) => return Err(e.context(format!("resolving action {owner}/{repo}@{git_ref}"))),
+                    Err(_) => {
+                        return Err(e.context(format!("resolving action {owner}/{repo}@{git_ref}")))
+                    }
                 },
             }
         };
         let dir = base.join(&sha);
         if !dir.is_dir() {
-            log(&format!("Downloading action {owner}/{repo}@{git_ref} ({})", &sha[..12]));
+            log(&format!(
+                "Downloading action {owner}/{repo}@{git_ref} ({})",
+                &sha[..12]
+            ));
             let api = self
                 .api
                 .as_ref()
@@ -99,15 +113,25 @@ pub fn collect_actions(
         .collect();
     let mut local_seen: BTreeSet<String> = BTreeSet::new();
     while let Some(uses) = todo.pop() {
-        let Ok(parsed) = Uses::parse(&uses) else { continue };
+        let Ok(parsed) = Uses::parse(&uses) else {
+            continue;
+        };
         match &parsed {
-            Uses::Remote { owner, repo, path, git_ref } => {
+            Uses::Remote {
+                owner,
+                repo,
+                path,
+                git_ref,
+            } => {
                 let key = parsed.repo_ref().unwrap().to_ascii_lowercase();
                 if !seen.insert(format!("{key}/{}", path.clone().unwrap_or_default())) {
                     continue;
                 }
                 let dir = cache.ensure(owner, repo, git_ref, log)?;
-                if !out.iter().any(|(o, r, g, _)| format!("{o}/{r}@{g}").to_ascii_lowercase() == key) {
+                if !out
+                    .iter()
+                    .any(|(o, r, g, _)| format!("{o}/{r}@{g}").to_ascii_lowercase() == key)
+                {
                     out.push((owner.clone(), repo.clone(), git_ref.clone(), dir.clone()));
                 }
                 let action_dir = match path {
@@ -124,7 +148,11 @@ pub fn collect_actions(
                 }
                 let rel = path.trim_start_matches("./").trim_end_matches('/');
                 let meta_src = ["action.yml", "action.yaml"].iter().find_map(|f| {
-                    let p = if rel.is_empty() { f.to_string() } else { format!("{rel}/{f}") };
+                    let p = if rel.is_empty() {
+                        f.to_string()
+                    } else {
+                        format!("{rel}/{f}")
+                    };
                     git.show(checkout_sha, &p).ok().flatten()
                 });
                 if let Some(src) = meta_src {
@@ -164,9 +192,12 @@ pub fn checkout_depths(job: &Job) -> BTreeSet<u32> {
 }
 
 /// Builds and caches checkout packs per (commit, depth) for a run.
+/// A pack file and its shallow boundary commits.
+pub type Pack = (PathBuf, Vec<String>);
+
 pub struct PackCache {
     dir: PathBuf,
-    built: Mutex<HashMap<(String, u32), (PathBuf, Vec<String>)>>,
+    built: Mutex<HashMap<(String, u32), Pack>>,
 }
 
 impl PackCache {
@@ -177,7 +208,7 @@ impl PackCache {
         }
     }
 
-    pub fn get(&self, git: &Git, sha: &str, depth: u32) -> Result<(PathBuf, Vec<String>)> {
+    pub fn get(&self, git: &Git, sha: &str, depth: u32) -> Result<Pack> {
         let mut built = self.built.lock().unwrap();
         if let Some(p) = built.get(&(sha.to_string(), depth)) {
             return Ok(p.clone());
@@ -224,7 +255,11 @@ pub struct SecretValues {
 }
 
 /// Look up referenced secrets in the keychain. `GITHUB_TOKEN` is the gh token.
-pub fn resolve_secrets(names: &[String], secrets: Option<&Secrets>, token: &str) -> Result<SecretValues> {
+pub fn resolve_secrets(
+    names: &[String],
+    secrets: Option<&Secrets>,
+    token: &str,
+) -> Result<SecretValues> {
     let mut values = Map::new();
     let mut missing = Vec::new();
     values.insert("GITHUB_TOKEN".into(), Value::String(token.to_string()));
@@ -329,7 +364,10 @@ pub fn write_bundle(dir: &Path, input: BundleInput) -> Result<JobSpec> {
             file: rel,
         });
     }
-    std::fs::write(dir.join("event.json"), serde_json::to_vec_pretty(&pw.payload)?)?;
+    std::fs::write(
+        dir.join("event.json"),
+        serde_json::to_vec_pretty(&pw.payload)?,
+    )?;
 
     let mut contexts = Map::new();
     let mut github = pw.github.clone();
@@ -353,10 +391,16 @@ pub fn write_bundle(dir: &Path, input: BundleInput) -> Result<JobSpec> {
                 functions: &baste_expr::NoFunctions,
             };
             let s = match v {
-                Value::String(s) => baste_expr::interpolate(s, &env).map_err(|e| anyhow!("timeout-minutes: {e}"))?,
+                Value::String(s) => {
+                    baste_expr::interpolate(s, &env).map_err(|e| anyhow!("timeout-minutes: {e}"))?
+                }
                 other => scalar_string(other).unwrap_or_default(),
             };
-            Some(s.trim().parse::<f64>().map_err(|_| anyhow!("timeout-minutes must be a number, got '{s}'"))?)
+            Some(
+                s.trim()
+                    .parse::<f64>()
+                    .map_err(|_| anyhow!("timeout-minutes must be a number, got '{s}'"))?,
+            )
         }
     };
     let defaults = job.defaults.or(&pw.workflow.defaults);
@@ -446,11 +490,23 @@ jobs:
         let job = wf.job("build").unwrap();
         assert_eq!(
             referenced_secrets(&wf.env, job),
-            vec!["WF_SECRET", "JOB_SECRET", "STEP_SECRET", "COND_SECRET", "GITHUB_TOKEN"]
+            vec![
+                "WF_SECRET",
+                "JOB_SECRET",
+                "STEP_SECRET",
+                "COND_SECRET",
+                "GITHUB_TOKEN"
+            ]
         );
-        assert_eq!(checkout_depths(job).into_iter().collect::<Vec<_>>(), vec![0, 1]);
+        assert_eq!(
+            checkout_depths(job).into_iter().collect::<Vec<_>>(),
+            vec![0, 1]
+        );
         let r = resolve_secrets(&referenced_secrets(&wf.env, job), None, "tok").unwrap();
-        assert_eq!(r.missing, vec!["WF_SECRET", "JOB_SECRET", "STEP_SECRET", "COND_SECRET"]);
+        assert_eq!(
+            r.missing,
+            vec!["WF_SECRET", "JOB_SECRET", "STEP_SECRET", "COND_SECRET"]
+        );
         assert_eq!(r.values["GITHUB_TOKEN"], json!("tok"));
     }
 }

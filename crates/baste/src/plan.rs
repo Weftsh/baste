@@ -27,6 +27,15 @@ pub struct PlannedWorkflow {
     pub vars: Value,
 }
 
+/// An open pull request for the pushed branch.
+struct PrPlan {
+    raw: Value,
+    info: PullRequestInfo,
+    /// The local test merge commit, if the merge is clean.
+    merge: Option<String>,
+    changed: Option<Vec<String>>,
+}
+
 /// Facts gathered once per run.
 pub struct RunFacts {
     pub actor: String,
@@ -66,7 +75,9 @@ pub fn gather_facts(run: &mut Run, git: &Git, api: Option<&GitHub>) -> RunFacts 
                 facts.default_branch = Some(info.default_branch.clone());
                 facts.repository = info.raw;
             }
-            Err(e) => run.notes.push(format!("Couldn't read repository details: {e}")),
+            Err(e) => run
+                .notes
+                .push(format!("Couldn't read repository details: {e}")),
         }
         match api.variables() {
             Ok(v) => facts.vars = v,
@@ -102,7 +113,10 @@ pub fn plan(
         });
     }
     if files.is_empty() {
-        run.notes.push(format!("No workflows in {WORKFLOW_DIR} at {}", run.short_sha()));
+        run.notes.push(format!(
+            "No workflows in {WORKFLOW_DIR} at {}",
+            run.short_sha()
+        ));
         return Ok(vec![]);
     }
 
@@ -112,15 +126,23 @@ pub fn plan(
 
     // Is there an open pull request for this branch? Then pull_request
     // workflows run too, on GitHub's test merge commit.
-    let mut pr: Option<(Value, PullRequestInfo, Option<String>, Option<Vec<String>>)> = None;
-    let wants_pr = run.event_override.as_deref().is_none_or(|e| e == "pull_request");
+    let mut pr: Option<PrPlan> = None;
+    let wants_pr = run
+        .event_override
+        .as_deref()
+        .is_none_or(|e| e == "pull_request");
     if let (Some(api), Some(b), false, true) = (api, &branch, is_tag, wants_pr) {
         match api.open_pull_request(b) {
             Ok(Some(raw)) => {
                 let base_ref = raw["base"]["ref"].as_str().unwrap_or_default().to_string();
                 let remote = run.remote.clone().unwrap_or_else(|| "origin".into());
                 let base_sha = git
-                    .try_run(&["rev-parse", "--verify", "--quiet", &format!("refs/remotes/{remote}/{base_ref}")])
+                    .try_run(&[
+                        "rev-parse",
+                        "--verify",
+                        "--quiet",
+                        &format!("refs/remotes/{remote}/{base_ref}"),
+                    ])
                     .or_else(|| {
                         raw["base"]["sha"]
                             .as_str()
@@ -146,7 +168,9 @@ pub fn plan(
                                 None
                             }
                             Err(e) => {
-                                run.notes.push(format!("Couldn't create the test merge for #{number}: {e}"));
+                                run.notes.push(format!(
+                                    "Couldn't create the test merge for #{number}: {e}"
+                                ));
                                 None
                             }
                         };
@@ -163,17 +187,26 @@ pub fn plan(
                     }
                 };
                 run.pull_request = Some(info.clone());
-                pr = Some((raw, info, merge, changed));
+                pr = Some(PrPlan {
+                    raw,
+                    info,
+                    merge,
+                    changed,
+                });
             }
             Ok(None) => {}
-            Err(e) => run.notes.push(format!("Couldn't look up pull requests: {e}")),
+            Err(e) => run
+                .notes
+                .push(format!("Couldn't look up pull requests: {e}")),
         }
     }
 
     let run_number = store.list().map(|r| r.len()).unwrap_or(1).max(1);
     let mut planned = Vec::new();
     for file in files {
-        let Some(src) = git.show(&sha, &file)? else { continue };
+        let Some(src) = git.show(&sha, &file)? else {
+            continue;
+        };
         let wf = match Workflow::parse(&file, &src) {
             Ok(w) => w,
             Err(e) => {
@@ -196,7 +229,13 @@ pub fn plan(
                 run.git_ref.clone(),
                 push_payload(run, git, facts),
             )
-        } else if let Some((raw, info, Some(merge), changed)) = &pr {
+        } else if let Some(PrPlan {
+            raw,
+            info,
+            merge: Some(merge),
+            changed,
+        }) = &pr
+        {
             let matches = wf
                 .on
                 .matches_pull_request(&info.base_ref, "synchronize", changed.as_deref())
@@ -213,7 +252,16 @@ pub fn plan(
         } else {
             continue;
         };
-        let github = github_context(run, facts, &wf, event, &checkout_sha, &checkout_ref, &payload, run_number);
+        let github = github_context(
+            run,
+            facts,
+            &wf,
+            event,
+            &checkout_sha,
+            &checkout_ref,
+            &payload,
+            run_number,
+        );
         planned.push(PlannedWorkflow {
             workflow: wf,
             event: event.to_string(),
@@ -321,7 +369,11 @@ fn wanted_jobs(wf: &Workflow, only: &[String]) -> Vec<String> {
         return wf.jobs.iter().map(|j| j.id.clone()).collect();
     }
     let mut out: Vec<String> = Vec::new();
-    let mut todo: Vec<String> = only.iter().filter(|j| wf.job(j).is_some()).cloned().collect();
+    let mut todo: Vec<String> = only
+        .iter()
+        .filter(|j| wf.job(j).is_some())
+        .cloned()
+        .collect();
     while let Some(id) = todo.pop() {
         if out.contains(&id) {
             continue;
@@ -334,7 +386,12 @@ fn wanted_jobs(wf: &Workflow, only: &[String]) -> Vec<String> {
     out
 }
 
-pub fn instance_records(run: &Run, pw: &PlannedWorkflow, job: &Job, instances: &[JobInstance]) -> Vec<JobRecord> {
+pub fn instance_records(
+    run: &Run,
+    pw: &PlannedWorkflow,
+    job: &Job,
+    instances: &[JobInstance],
+) -> Vec<JobRecord> {
     let wf_name = pw.workflow.display_name();
     let mut out: Vec<JobRecord> = Vec::new();
     for (i, inst) in instances.iter().enumerate() {
@@ -344,7 +401,11 @@ pub fn instance_records(run: &Run, pw: &PlannedWorkflow, job: &Job, instances: &
             key.push('x');
         }
         let (state, reason, context) = match &inst.placement {
-            Placement::Local => (JobState::Queued, None, Some(status_context(&wf_name, &inst.name))),
+            Placement::Local => (
+                JobState::Queued,
+                None,
+                Some(status_context(&wf_name, &inst.name)),
+            ),
             Placement::GitHub(r) => (JobState::HandedToGithub, Some(r.clone()), None),
         };
         out.push(JobRecord {
@@ -482,7 +543,10 @@ fn github_context(
     } else if let Some(t) = checkout_ref.strip_prefix("refs/tags/") {
         (t.to_string(), "tag")
     } else {
-        (checkout_ref.trim_start_matches("refs/pull/").to_string(), "branch")
+        (
+            checkout_ref.trim_start_matches("refs/pull/").to_string(),
+            "branch",
+        )
     };
     let (head_ref, base_ref) = match (&run.pull_request, event) {
         (Some(pr), "pull_request") => (pr.head_ref.clone(), pr.base_ref.clone()),

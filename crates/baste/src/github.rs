@@ -104,14 +104,11 @@ pub struct WorkflowRun {
     pub created_at: String,
     pub run_started_at: Option<String>,
     pub updated_at: String,
-    #[serde(default)]
-    pub event: String,
 }
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct ActionsJob {
     pub name: String,
-    pub conclusion: Option<String>,
     pub started_at: Option<String>,
     pub completed_at: Option<String>,
 }
@@ -252,16 +249,6 @@ impl GitHub {
         Ok(())
     }
 
-    pub fn commit_exists(&self, sha: &str) -> Result<bool> {
-        match self.get_json(&format!("{}/commits/{sha}", self.repo_path())) {
-            Ok(_) => Ok(true),
-            Err(e) => match e.downcast_ref::<ApiError>() {
-                Some(ApiError { status: 404 | 422, .. }) => Ok(false),
-                _ => Err(e),
-            },
-        }
-    }
-
     /// The open pull request whose head is `branch` in this repository.
     pub fn open_pull_request(&self, branch: &str) -> Result<Option<Value>> {
         let (v, _) = self.get_json(&format!(
@@ -275,9 +262,17 @@ impl GitHub {
 
     /// Repository variables for the `vars` context (empty without access).
     pub fn variables(&self) -> Result<serde_json::Map<String, Value>> {
-        let (v, _) = self.get_json(&format!("{}/actions/variables?per_page=30", self.repo_path()))?;
+        let (v, _) = self.get_json(&format!(
+            "{}/actions/variables?per_page=30",
+            self.repo_path()
+        ))?;
         let mut out = serde_json::Map::new();
-        for var in v.get("variables").and_then(Value::as_array).into_iter().flatten() {
+        for var in v
+            .get("variables")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+        {
             if let (Some(n), Some(val)) = (
                 var.get("name").and_then(Value::as_str),
                 var.get("value").and_then(Value::as_str),
@@ -316,7 +311,10 @@ impl GitHub {
 
     /// Resolve an action ref (tag, branch, sha) to a commit sha.
     pub fn resolve_ref(&self, owner: &str, repo: &str, git_ref: &str) -> Result<String> {
-        let (v, _) = self.get_json(&format!("/repos/{owner}/{repo}/commits/{}", urlencode(git_ref)))?;
+        let (v, _) = self.get_json(&format!(
+            "/repos/{owner}/{repo}/commits/{}",
+            urlencode(git_ref)
+        ))?;
         v.get("sha")
             .and_then(Value::as_str)
             .map(str::to_string)
@@ -356,7 +354,10 @@ pub fn unpack_tarball(reader: impl Read, dest: &Path) -> Result<()> {
         if rel.as_os_str().is_empty() {
             continue;
         }
-        if rel.components().any(|c| matches!(c, std::path::Component::ParentDir)) {
+        if rel
+            .components()
+            .any(|c| matches!(c, std::path::Component::ParentDir))
+        {
             bail!("unsafe path in tarball: {}", path.display());
         }
         let out = tmp.join(&rel);

@@ -146,8 +146,13 @@ impl Git {
     }
 
     pub fn rev_parse(&self, rev: &str) -> Result<String> {
-        self.run(&["rev-parse", "--verify", "--quiet", &format!("{rev}^{{commit}}")])
-            .map_err(|_| anyhow!("unknown revision '{rev}'"))
+        self.run(&[
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            &format!("{rev}^{{commit}}"),
+        ])
+        .map_err(|_| anyhow!("unknown revision '{rev}'"))
     }
 
     pub fn object_exists(&self, sha: &str) -> bool {
@@ -182,12 +187,26 @@ impl Git {
 
     /// The GitHub repository behind a remote name or URL.
     pub fn repo(&self, remote_or_url: &str) -> Result<RepoRef> {
-        let url = if remote_or_url.contains("://") || remote_or_url.contains('@') {
-            remote_or_url.to_string()
-        } else {
-            self.remote_url(remote_or_url)?
-        };
-        RepoRef::parse(&url).ok_or_else(|| anyhow!("'{url}' doesn't look like a GitHub repository URL"))
+        if remote_or_url.contains("://") || remote_or_url.contains('@') {
+            return RepoRef::parse(remote_or_url).ok_or_else(|| {
+                anyhow!("'{remote_or_url}' doesn't look like a GitHub repository URL")
+            });
+        }
+        // The configured URL comes first: `pushInsteadOf` rewrites can make
+        // the push URL a local path or mirror.
+        let candidates = [
+            self.try_run(&["config", "--get", &format!("remote.{remote_or_url}.url")]),
+            self.remote_url(remote_or_url).ok(),
+        ];
+        for url in candidates.iter().flatten() {
+            if let Some(r) = RepoRef::parse(url) {
+                return Ok(r);
+            }
+        }
+        let shown = candidates.into_iter().flatten().next().unwrap_or_default();
+        Err(anyhow!(
+            "remote '{remote_or_url}' ({shown}) doesn't look like a GitHub repository URL"
+        ))
     }
 
     /// Contents of `path` at `sha`, or `None` if it doesn't exist there.
@@ -205,13 +224,22 @@ impl Git {
 
     /// File names directly under `dir` at `sha`.
     pub fn ls_tree(&self, sha: &str, dir: &str) -> Result<Vec<String>> {
-        let out = self.run(&["ls-tree", "--name-only", sha, &format!("{}/", dir.trim_end_matches('/'))])?;
+        let out = self.run(&[
+            "ls-tree",
+            "--name-only",
+            sha,
+            &format!("{}/", dir.trim_end_matches('/')),
+        ])?;
         Ok(out.lines().map(str::to_string).collect())
     }
 
     pub fn changed_files(&self, from: &str, to: &str) -> Result<Vec<String>> {
         let out = self.run(&["diff", "--name-only", "--no-renames", from, to])?;
-        Ok(out.lines().filter(|l| !l.is_empty()).map(str::to_string).collect())
+        Ok(out
+            .lines()
+            .filter(|l| !l.is_empty())
+            .map(str::to_string)
+            .collect())
     }
 
     pub fn merge_base(&self, a: &str, b: &str) -> Option<String> {
@@ -248,13 +276,23 @@ impl Git {
             .output()
             .context("running git commit-tree")?;
         if !merge.status.success() {
-            bail!("git commit-tree failed: {}", String::from_utf8_lossy(&merge.stderr).trim());
+            bail!(
+                "git commit-tree failed: {}",
+                String::from_utf8_lossy(&merge.stderr).trim()
+            );
         }
-        Ok(Some(String::from_utf8_lossy(&merge.stdout).trim().to_string()))
+        Ok(Some(
+            String::from_utf8_lossy(&merge.stdout).trim().to_string(),
+        ))
     }
 
     pub fn commit_info(&self, sha: &str) -> Result<CommitInfo> {
-        let out = self.run(&["show", "-s", "--format=%H%x00%an%x00%ae%x00%cn%x00%ce%x00%cI%x00%B", sha])?;
+        let out = self.run(&[
+            "show",
+            "-s",
+            "--format=%H%x00%an%x00%ae%x00%cn%x00%ce%x00%cI%x00%B",
+            sha,
+        ])?;
         let mut parts = out.splitn(7, '\0');
         let mut next = || parts.next().unwrap_or_default().to_string();
         Ok(CommitInfo {
@@ -272,7 +310,11 @@ impl Git {
         match self.try_run(&["config", "core.hooksPath"]) {
             Some(p) if !p.is_empty() => {
                 let p = PathBuf::from(p);
-                Ok(if p.is_absolute() { p } else { self.root.join(p) })
+                Ok(if p.is_absolute() {
+                    p
+                } else {
+                    self.root.join(p)
+                })
             }
             _ => Ok(self.common_dir.join("hooks")),
         }
@@ -295,9 +337,13 @@ impl Git {
         }
         let objects = revlist.output().context("running git rev-list")?;
         if !objects.status.success() {
-            bail!("git rev-list failed: {}", String::from_utf8_lossy(&objects.stderr).trim());
+            bail!(
+                "git rev-list failed: {}",
+                String::from_utf8_lossy(&objects.stderr).trim()
+            );
         }
-        let file = std::fs::File::create(out).with_context(|| format!("creating {}", out.display()))?;
+        let file =
+            std::fs::File::create(out).with_context(|| format!("creating {}", out.display()))?;
         let mut pack = self
             .command()
             .args(["pack-objects", "--stdout", "-q"])
@@ -325,7 +371,11 @@ impl Git {
             let mut next = Vec::new();
             for c in &frontier {
                 let line = self.run(&["rev-list", "--parents", "-n1", c])?;
-                let parents: Vec<String> = line.split_whitespace().skip(1).map(str::to_string).collect();
+                let parents: Vec<String> = line
+                    .split_whitespace()
+                    .skip(1)
+                    .map(str::to_string)
+                    .collect();
                 if level == depth {
                     if !parents.is_empty() {
                         shallow.push(c.clone());
@@ -355,20 +405,44 @@ mod tests {
     #[test]
     fn parses_remote_urls() {
         let r = RepoRef::parse("https://github.com/weftsh/baste.git").unwrap();
-        assert_eq!((r.host.as_str(), r.full_name().as_str()), ("github.com", "weftsh/baste"));
-        assert_eq!(RepoRef::parse("git@github.com:weftsh/baste.git").unwrap().full_name(), "weftsh/baste");
-        assert_eq!(RepoRef::parse("ssh://git@github.com/weftsh/baste").unwrap().name, "baste");
-        assert_eq!(RepoRef::parse("https://x-access-token@ghe.corp:8443/a/b/").unwrap().host, "ghe.corp");
+        assert_eq!(
+            (r.host.as_str(), r.full_name().as_str()),
+            ("github.com", "weftsh/baste")
+        );
+        assert_eq!(
+            RepoRef::parse("git@github.com:weftsh/baste.git")
+                .unwrap()
+                .full_name(),
+            "weftsh/baste"
+        );
+        assert_eq!(
+            RepoRef::parse("ssh://git@github.com/weftsh/baste")
+                .unwrap()
+                .name,
+            "baste"
+        );
+        assert_eq!(
+            RepoRef::parse("https://x-access-token@ghe.corp:8443/a/b/")
+                .unwrap()
+                .host,
+            "ghe.corp"
+        );
         assert!(RepoRef::parse("/local/path").is_none());
         assert!(RepoRef::parse("https://github.com/only-owner").is_none());
     }
 
     pub(crate) fn init_repo(dir: &Path) -> Git {
         let run = |args: &[&str]| {
-            let s = Command::new("git").arg("-C").arg(dir).args(args)
-                .env("GIT_AUTHOR_NAME", "t").env("GIT_AUTHOR_EMAIL", "t@e")
-                .env("GIT_COMMITTER_NAME", "t").env("GIT_COMMITTER_EMAIL", "t@e")
-                .status().unwrap();
+            let s = Command::new("git")
+                .arg("-C")
+                .arg(dir)
+                .args(args)
+                .env("GIT_AUTHOR_NAME", "t")
+                .env("GIT_AUTHOR_EMAIL", "t@e")
+                .env("GIT_COMMITTER_NAME", "t")
+                .env("GIT_COMMITTER_EMAIL", "t@e")
+                .status()
+                .unwrap();
             assert!(s.success(), "git {args:?}");
         };
         run(&["init", "-q", "-b", "main"]);
@@ -394,7 +468,10 @@ mod tests {
         let full = d.path().join("f.pack");
         assert!(git.write_pack(&head, 0, &full).unwrap().is_empty());
         assert!(std::fs::metadata(&full).unwrap().len() > std::fs::metadata(&pack).unwrap().len());
-        assert_eq!(git.changed_files(&format!("{head}~1"), &head).unwrap(), vec!["b.txt"]);
+        assert_eq!(
+            git.changed_files(&format!("{head}~1"), &head).unwrap(),
+            vec!["b.txt"]
+        );
         let info = git.commit_info(&head).unwrap();
         assert_eq!(info.message, "two");
     }

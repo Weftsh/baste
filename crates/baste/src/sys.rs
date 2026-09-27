@@ -47,7 +47,10 @@ fn sysctl(name: &str) -> Option<String> {
 
 pub fn total_memory_mb() -> Option<u32> {
     if cfg!(target_os = "macos") {
-        return sysctl("hw.memsize")?.parse::<u64>().ok().map(|b| (b / 1024 / 1024) as u32);
+        return sysctl("hw.memsize")?
+            .parse::<u64>()
+            .ok()
+            .map(|b| (b / 1024 / 1024) as u32);
     }
     let meminfo = std::fs::read_to_string("/proc/meminfo").ok()?;
     let kb: u64 = meminfo
@@ -74,7 +77,11 @@ pub fn on_battery() -> Option<bool> {
         let kind = std::fs::read_to_string(p.join("type")).unwrap_or_default();
         if kind.trim() == "Mains" {
             saw_mains = true;
-            if std::fs::read_to_string(p.join("online")).unwrap_or_default().trim() == "1" {
+            if std::fs::read_to_string(p.join("online"))
+                .unwrap_or_default()
+                .trim()
+                == "1"
+            {
                 return Some(false);
             }
         }

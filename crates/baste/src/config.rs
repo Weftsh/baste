@@ -56,7 +56,9 @@ impl Config {
     pub fn load() -> Result<Config> {
         let path = Self::path();
         match std::fs::read_to_string(&path) {
-            Ok(text) => toml::from_str(&text).with_context(|| format!("parsing {}", path.display())),
+            Ok(text) => {
+                toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))
+            }
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(Config::default()),
             Err(e) => Err(e).with_context(|| format!("reading {}", path.display())),
         }
@@ -77,10 +79,14 @@ impl Config {
             .ok_or_else(|| anyhow::anyhow!("unknown setting '{key}'"))?;
         let parsed = match current {
             toml::Value::Integer(_) => toml::Value::Integer(
-                value.parse().with_context(|| format!("'{key}' must be a number"))?,
+                value
+                    .parse()
+                    .with_context(|| format!("'{key}' must be a number"))?,
             ),
             toml::Value::Boolean(_) => toml::Value::Boolean(
-                value.parse().with_context(|| format!("'{key}' must be true or false"))?,
+                value
+                    .parse()
+                    .with_context(|| format!("'{key}' must be true or false"))?,
             ),
             _ => toml::Value::String(value.to_string()),
         };
@@ -93,7 +99,9 @@ impl Config {
         if self.cpus > 0 {
             return self.cpus;
         }
-        let n = std::thread::available_parallelism().map(|n| n.get() as u32).unwrap_or(2);
+        let n = std::thread::available_parallelism()
+            .map(|n| n.get() as u32)
+            .unwrap_or(2);
         (n / 2).clamp(1, 4)
     }
 
@@ -107,7 +115,9 @@ impl Config {
 }
 
 fn env_dir(var: &str) -> Option<PathBuf> {
-    std::env::var_os(var).filter(|v| !v.is_empty()).map(PathBuf::from)
+    std::env::var_os(var)
+        .filter(|v| !v.is_empty())
+        .map(PathBuf::from)
 }
 
 fn home() -> PathBuf {

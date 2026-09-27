@@ -174,6 +174,9 @@ pub(crate) struct ProcResult {
     pub state: Vec<(String, String)>,
 }
 
+/// `GITHUB_STATE` entries saved by a step, in order.
+pub(crate) type SavedState = Vec<(String, String)>;
+
 /// A post step registered by an action's main step.
 pub(crate) struct PostStep {
     pub name: String,
@@ -1298,7 +1301,7 @@ impl<'a> Job<'a> {
         &mut self,
         index: usize,
         fc: &FileCommands,
-    ) -> Result<(Map<String, Value>, Vec<(String, String)>), String> {
+    ) -> Result<(Map<String, Value>, SavedState), String> {
         let read = |p: &Path| std::fs::read_to_string(p).unwrap_or_default();
         let cleanup = || {
             for p in [&fc.env, &fc.output, &fc.path, &fc.state, &fc.summary] {

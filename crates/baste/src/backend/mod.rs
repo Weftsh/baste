@@ -17,7 +17,6 @@ pub mod tart;
 /// One job to run.
 pub struct JobLaunch<'a> {
     pub run_id: &'a str,
-    pub job_key: &'a str,
     /// Directory holding `job.json` and the files it references.
     pub bundle: &'a Path,
     /// Scratch space for this job (disks, sockets).
@@ -104,9 +103,17 @@ pub fn default_name() -> &'static str {
 pub fn select(config: &Config, override_name: Option<&str>) -> Result<Arc<dyn Backend>> {
     let name = override_name
         .map(str::to_string)
-        .or_else(|| std::env::var("BASTE_BACKEND").ok().filter(|s| !s.is_empty()))
+        .or_else(|| {
+            std::env::var("BASTE_BACKEND")
+                .ok()
+                .filter(|s| !s.is_empty())
+        })
         .unwrap_or_else(|| config.backend.clone());
-    let name = if name == "auto" { default_name().to_string() } else { name };
+    let name = if name == "auto" {
+        default_name().to_string()
+    } else {
+        name
+    };
     Ok(match name.as_str() {
         "firecracker" => Arc::new(firecracker::Firecracker::new(config)),
         "tart" => Arc::new(tart::Tart::new(config)),
@@ -148,4 +155,38 @@ pub fn pump_events(
         }
     }
     finished
+}
+
+/// A machine-wide VM slot, held while a VM runs. Slots bound how many VMs run
+/// at once across all runs and pick per-slot resources (tap devices).
+pub struct SlotGuard {
+    _file: std::fs::File,
+    pub index: usize,
+}
+
+/// Wait for a free slot. Returns `None` if `stop()` becomes true first.
+pub fn acquire_slot(max: usize, stop: &dyn Fn() -> bool) -> Option<SlotGuard> {
+    use std::os::unix::io::AsRawFd;
+    let dir = crate::config::state_dir().join("slots");
+    let _ = std::fs::create_dir_all(&dir);
+    loop {
+        for index in 0..max.max(1) {
+            let Ok(file) = std::fs::OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .write(true)
+                .open(dir.join(format!("{index}.lock")))
+            else {
+                continue;
+            };
+            // SAFETY: flock on an fd we own.
+            if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } == 0 {
+                return Some(SlotGuard { _file: file, index });
+            }
+        }
+        if stop() {
+            return None;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(500));
+    }
 }

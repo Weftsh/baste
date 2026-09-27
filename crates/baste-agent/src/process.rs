@@ -51,6 +51,8 @@ pub fn lookup_user(name: &str) -> Option<UserIds> {
             vec![gid]
         } else {
             groups.truncate(n.max(0) as usize);
+            // gid_t is u32 on Linux but the macOS API hands back c_int.
+            #[allow(clippy::unnecessary_cast)]
             groups.into_iter().map(|g| g as u32).collect()
         };
         Some(UserIds {

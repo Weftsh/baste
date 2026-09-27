@@ -4,7 +4,9 @@
 //! `secret-tool`. Machines without either can opt in to a `0600` JSON file by
 //! setting `BASTE_SECRETS_FILE`.
 
-use anyhow::{anyhow, bail, Context, Result};
+#[cfg(target_os = "macos")]
+use anyhow::anyhow;
+use anyhow::{bail, Context, Result};
 use serde_json::{Map, Value};
 use std::collections::BTreeSet;
 use std::io::Write;
@@ -83,8 +85,16 @@ impl Secrets {
     pub fn list(&self) -> Result<(Vec<String>, Vec<String>)> {
         let idx = index()?;
         let prefix = format!("{}:", self.scope);
-        let repo = idx.iter().filter_map(|a| a.strip_prefix(&prefix)).map(str::to_string).collect();
-        let global = idx.iter().filter_map(|a| a.strip_prefix("*:")).map(str::to_string).collect();
+        let repo = idx
+            .iter()
+            .filter_map(|a| a.strip_prefix(&prefix))
+            .map(str::to_string)
+            .collect();
+        let global = idx
+            .iter()
+            .filter_map(|a| a.strip_prefix("*:"))
+            .map(str::to_string)
+            .collect();
         Ok((repo, global))
     }
 
@@ -109,21 +119,38 @@ impl Secrets {
                 } else if out.stderr.is_empty() {
                     Ok(None)
                 } else {
-                    bail!("secret-tool: {}", String::from_utf8_lossy(&out.stderr).trim())
+                    bail!(
+                        "secret-tool: {}",
+                        String::from_utf8_lossy(&out.stderr).trim()
+                    )
                 }
             }
-            Backend::File(p) => Ok(read_file(p)?.get(account).and_then(Value::as_str).map(str::to_string)),
+            Backend::File(p) => Ok(read_file(p)?
+                .get(account)
+                .and_then(Value::as_str)
+                .map(str::to_string)),
         }
     }
 
     fn set_raw(&self, account: &str, value: &str) -> Result<()> {
         match &self.backend {
             #[cfg(target_os = "macos")]
-            Backend::Keychain => security_framework::passwords::set_generic_password(SERVICE, account, value.as_bytes())
-                .map_err(|e| anyhow!("writing to the Keychain: {e}")),
+            Backend::Keychain => security_framework::passwords::set_generic_password(
+                SERVICE,
+                account,
+                value.as_bytes(),
+            )
+            .map_err(|e| anyhow!("writing to the Keychain: {e}")),
             Backend::SecretTool => {
                 let mut child = Command::new("secret-tool")
-                    .args(["store", &format!("--label=baste {account}"), "service", SERVICE, "account", account])
+                    .args([
+                        "store",
+                        &format!("--label=baste {account}"),
+                        "service",
+                        SERVICE,
+                        "account",
+                        account,
+                    ])
                     .stdin(Stdio::piped())
                     .stderr(Stdio::piped())
                     .spawn()
@@ -131,7 +158,10 @@ impl Secrets {
                 child.stdin.take().unwrap().write_all(value.as_bytes())?;
                 let out = child.wait_with_output()?;
                 if !out.status.success() {
-                    bail!("secret-tool: {}", String::from_utf8_lossy(&out.stderr).trim());
+                    bail!(
+                        "secret-tool: {}",
+                        String::from_utf8_lossy(&out.stderr).trim()
+                    );
                 }
                 Ok(())
             }
@@ -176,7 +206,9 @@ fn detect() -> Result<Backend> {
     #[cfg(not(target_os = "macos"))]
     {
         if crate::sys::which("secret-tool").is_none() {
-            bail!(no_keychain("secret-tool is not installed (package libsecret-tools)"));
+            bail!(no_keychain(
+                "secret-tool is not installed (package libsecret-tools)"
+            ));
         }
         let probe = Command::new("secret-tool")
             .args(["lookup", "service", SERVICE, "account", "__baste_probe__"])
