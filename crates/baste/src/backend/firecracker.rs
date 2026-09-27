@@ -178,7 +178,7 @@ impl Firecracker {
     }
 
     /// A cpio initramfs whose `/init` is the (static) Linux agent binary.
-    fn initramfs(&self) -> Result<PathBuf> {
+    pub fn initramfs(&self) -> Result<PathBuf> {
         let agent = super::agent_bin::agent_binary(self.arch)?;
         let bytes =
             std::fs::read(&agent).with_context(|| format!("reading {}", agent.display()))?;

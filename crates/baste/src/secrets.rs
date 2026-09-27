@@ -16,6 +16,7 @@ use std::process::{Command, Stdio};
 const SERVICE: &str = "baste";
 
 #[derive(Debug, Clone)]
+#[cfg_attr(target_os = "macos", allow(dead_code))]
 enum Backend {
     #[cfg(target_os = "macos")]
     Keychain,

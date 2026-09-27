@@ -188,6 +188,12 @@ enum ImageCmd {
         #[arg(long)]
         backend: Option<String>,
     },
+    /// Write the Firecracker initramfs (for debugging VM boots).
+    #[command(hide = true)]
+    Initramfs {
+        #[arg(long)]
+        out: std::path::PathBuf,
+    },
 }
 
 #[derive(Subcommand)]
@@ -391,6 +397,13 @@ fn dispatch(command: Command) -> Result<bool> {
                     b.name(),
                     b.image().unwrap_or_else(|| "none".into())
                 );
+                Ok(true)
+            }
+            ImageCmd::Initramfs { out } => {
+                let c = config::Config::load()?;
+                let path = backend::firecracker::Firecracker::new(&c).initramfs()?;
+                std::fs::copy(&path, &out)?;
+                println!("{}", out.display());
                 Ok(true)
             }
         },

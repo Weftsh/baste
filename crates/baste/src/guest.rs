@@ -30,6 +30,10 @@ pub enum AgentCmd {
         /// `run` a job, or `prepare` the image (run provision.sh).
         #[arg(long, default_value = "run")]
         mode: String,
+        /// Where events go: `vsock` (default) or a device such as
+        /// `/dev/hvc0` (for debugging a VM without vsock).
+        #[arg(long, default_value = "vsock")]
+        events: String,
     },
 }
 
@@ -65,8 +69,9 @@ pub fn agent(cmd: AgentCmd) -> Result<bool> {
             bundle_device,
             port,
             mode,
+            events,
         } => {
-            let r = guest_service(&bundle_device, port, &mode);
+            let r = guest_service(&bundle_device, port, &mode, &events);
             if let Err(e) = &r {
                 eprintln!("baste guest: {e:#}");
             }
@@ -87,9 +92,16 @@ fn unpack_bundle(device: &Path, dest: &Path) -> Result<()> {
     Ok(())
 }
 
-fn guest_service(device: &Path, port: u32, mode: &str) -> Result<()> {
+fn guest_service(device: &Path, port: u32, mode: &str, events: &str) -> Result<()> {
     let bundle = PathBuf::from("/opt/baste/bundle");
-    let stream = connect_host(port)?;
+    let stream = if events == "vsock" {
+        connect_host(port)?
+    } else {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(events)
+            .with_context(|| format!("opening {events}"))?
+    };
     let sink = JsonLinesSink::new(stream);
     let result = (|| -> Result<()> {
         unpack_bundle(device, &bundle)?;
@@ -189,29 +201,30 @@ fn connect_host(_port: u32) -> Result<std::fs::File> {
 
 /// End the VM. Firecracker exits when the guest reboots (`reboot=k`).
 fn power_off(clean: bool) {
-    if clean {
-        let ok = std::process::Command::new("systemctl")
+    let rebooting = clean
+        && std::process::Command::new("systemctl")
             .arg("reboot")
             .status()
             .is_ok_and(|s| s.success());
-        if ok {
-            return;
-        }
-    }
     #[cfg(target_os = "linux")]
-    // SAFETY: we are the guest; nothing else needs to survive.
-    unsafe {
-        libc::sync();
-        if std::process::id() != 1 {
-            libc::reboot(libc::RB_AUTOBOOT);
+    if !rebooting {
+        // SAFETY: we are the guest; nothing else needs to survive.
+        unsafe {
+            libc::sync();
+            if std::process::id() != 1 {
+                libc::reboot(libc::RB_AUTOBOOT);
+            }
         }
     }
+    #[cfg(not(target_os = "linux"))]
+    let _ = rebooting;
 }
 
 // ----- PID 1 in the Firecracker initramfs ------------------------------------
 
 /// Kernel command line parameters we use (`baste.*`).
 #[derive(Debug, Default, PartialEq)]
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub struct BootParams {
     pub lower: String,
     pub prepared: Option<String>,
@@ -219,8 +232,11 @@ pub struct BootParams {
     pub bundle: String,
     pub mode: String,
     pub dns: Vec<String>,
+    /// Event transport for the guest service (default vsock).
+    pub events: Option<String>,
 }
 
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub fn parse_cmdline(cmdline: &str) -> BootParams {
     let mut p = BootParams {
         lower: "/dev/vda".into(),
@@ -239,6 +255,7 @@ pub fn parse_cmdline(cmdline: &str) -> BootParams {
             "baste.upper" => p.upper = v.into(),
             "baste.bundle" => p.bundle = v.into(),
             "baste.mode" => p.mode = v.into(),
+            "baste.events" => p.events = Some(v.into()),
             "baste.dns" => {
                 p.dns = v
                     .split(',')
@@ -253,10 +270,16 @@ pub fn parse_cmdline(cmdline: &str) -> BootParams {
 }
 
 /// The systemd unit that starts the guest service after boot.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
 pub fn agent_unit(p: &BootParams) -> String {
     format!(
-        "[Unit]\nDescription=Baste agent\nAfter=network.target docker.service containerd.service\nWants=docker.service\n\n[Service]\nType=simple\nExecStart=/usr/local/bin/baste agent guest --bundle-device {} --mode {}\nEnvironment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin\nEnvironment=HOME=/root\nStandardOutput=journal+console\nStandardError=journal+console\n\n[Install]\nWantedBy=multi-user.target\n",
-        p.bundle, p.mode
+        "[Unit]\nDescription=Baste agent\nAfter=network.target docker.service containerd.service\nWants=docker.service\n\n[Service]\nType=simple\nExecStart=/usr/local/bin/baste agent guest --bundle-device {} --mode {}{}\nEnvironment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin\nEnvironment=HOME=/root\nStandardOutput=journal+console\nStandardError=journal+console\n\n[Install]\nWantedBy=multi-user.target\n",
+        p.bundle,
+        p.mode,
+        p.events
+            .as_deref()
+            .map(|e| format!(" --events {e}"))
+            .unwrap_or_default()
     )
 }
 
@@ -347,7 +370,9 @@ pub fn pid1() -> Result<()> {
         "systemd-networkd-wait-online.service",
         "systemd-resolved.service",
         "serial-getty@ttyS0.service",
+        "getty.target",
         "ssh.service",
+        "ssh.socket",
     ] {
         let path = units.join(masked);
         let _ = std::fs::remove_file(&path);

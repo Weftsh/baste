@@ -34,7 +34,9 @@ pub fn agent_binary(arch: &str) -> Result<PathBuf> {
             return Ok(sibling);
         }
     }
-    if cfg!(target_os = "linux") && std::env::consts::ARCH == arch {
+    // The agent runs as the VM's first process, before any libraries exist,
+    // so only a statically linked build of ourselves will do.
+    if cfg!(target_os = "linux") && std::env::consts::ARCH == arch && is_static_elf(&exe) {
         return Ok(exe);
     }
     let version = env!("CARGO_PKG_VERSION");
@@ -47,6 +49,24 @@ pub fn agent_binary(arch: &str) -> Result<PathBuf> {
     }
     download(version, arch, &cached)?;
     Ok(cached)
+}
+
+/// Whether an ELF executable has no program interpreter (is statically linked).
+pub fn is_static_elf(path: &std::path::Path) -> bool {
+    let Ok(bytes) = std::fs::read(path) else {
+        return false;
+    };
+    if bytes.len() < 64 || &bytes[..4] != b"\x7fELF" || bytes[4] != 2 {
+        return false; // not a 64-bit ELF
+    }
+    let u16_at = |o: usize| u16::from_le_bytes([bytes[o], bytes[o + 1]]) as usize;
+    let phoff = u64::from_le_bytes(bytes[32..40].try_into().unwrap()) as usize;
+    let (phentsize, phnum) = (u16_at(54), u16_at(56));
+    const PT_INTERP: u32 = 3;
+    !(0..phnum).any(|i| {
+        let o = phoff + i * phentsize;
+        o + 4 <= bytes.len() && u32::from_le_bytes(bytes[o..o + 4].try_into().unwrap()) == PT_INTERP
+    })
 }
 
 fn download(version: &str, arch: &str, to: &std::path::Path) -> Result<()> {
@@ -96,4 +116,21 @@ fn download(version: &str, arch: &str, to: &std::path::Path) -> Result<()> {
         }
     }
     bail!("{name} has no baste binary")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn detects_dynamic_executables() {
+        // /bin/sh is dynamically linked on every distribution we build on.
+        assert!(!is_static_elf(std::path::Path::new("/bin/sh")));
+        assert!(!is_static_elf(std::path::Path::new("/etc/hostname")));
+        let musl = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/x86_64-unknown-linux-musl/release/baste");
+        if musl.is_file() {
+            assert!(is_static_elf(&musl));
+        }
+    }
 }
