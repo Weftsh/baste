@@ -108,7 +108,7 @@ checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
 name = "baste"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -135,7 +135,7 @@ dependencies = [
 
 [[package]]
 name = "baste-agent"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -156,7 +156,7 @@ dependencies = [
 
 [[package]]
 name = "baste-expr"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde_json",
  "thiserror",
@@ -164,7 +164,7 @@ dependencies = [
 
 [[package]]
 name = "baste-protocol"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -172,7 +172,7 @@ dependencies = [
 
 [[package]]
 name = "baste-workflow"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "baste-expr",
  "regex",
