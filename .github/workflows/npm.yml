@@ -67,6 +67,12 @@ jobs:
           id_token=$(curl -fsS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org" | jq -r .value)
           echo "::add-mask::$id_token"
+          # What npm compares with each package's Trusted Publisher settings.
+          node -e '
+            const c = JSON.parse(Buffer.from(process.argv[1].split(".")[1], "base64url"));
+            console.log(`This run, as npm sees it: owner "${c.repository_owner}", repository "${c.repository}", ` +
+              `workflow "${c.workflow_ref}", environment "${c.environment || ""}"`);
+          ' "$id_token"
           untrusted=0
           while read -r dir; do
             name=$(node -p "require('./$dir/package.json').name")
