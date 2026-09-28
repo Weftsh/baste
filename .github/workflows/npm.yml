@@ -5,10 +5,10 @@ name: npm
 # run it by hand with a tag to (re)publish an existing release. Versions
 # already on npm are skipped, so re-running is safe.
 #
-# This is the only workflow that publishes to npm, so it is the one to name
-# in each package's Trusted Publisher settings on npmjs.com (npm.yml). With
-# that in place npm authenticates the run through GitHub's OIDC token; until
-# then the NPM_TOKEN secret is used.
+# Publishing uses npm Trusted Publishing: no npm token is stored. Each
+# package's settings on npmjs.com trust this workflow (GitHub Actions,
+# Weftsh/baste, npm.yml, no environment), and npm authenticates each run
+# through GitHub's OIDC token. This is the only workflow that publishes.
 on:
   workflow_run:
     workflows: [Release]
@@ -58,12 +58,11 @@ jobs:
       - name: Build the packages
         run: node npm/build.mjs "$TAG" release dist | tee order.txt
       - name: Check each package trusts this workflow (Trusted Publishing)
-        env:
-          HAS_TOKEN: ${{ secrets.NPM_TOKEN != '' }}
         run: |
           # The same exchange npm publish does: GitHub's OIDC token for a
-          # short-lived npm token. npm falls back to NPM_TOKEN silently when it
-          # fails, so report npm's answer here. The npm token isn't printed.
+          # short-lived npm token. Doing it first means a settings problem
+          # stops the run before anything is published, with npm's reason.
+          # The npm token isn't printed.
           id_token=$(curl -fsS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
             "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=npm:registry.npmjs.org" | jq -r .value)
           echo "::add-mask::$id_token"
@@ -82,19 +81,16 @@ jobs:
             if [ "$status" = 200 ] || [ "$status" = 201 ]; then
               echo "$name: trusted"
             else
-              echo "::warning::$name doesn't trust this workflow (HTTP $status): $(jq -c 'del(.token)' exchange.json 2>/dev/null || cat exchange.json)"
+              echo "::error::$name doesn't trust this workflow (HTTP $status): $(jq -c 'del(.token)' exchange.json 2>/dev/null || cat exchange.json)"
               untrusted=1
             fi
             rm -f exchange.json
           done < order.txt
-          if [ "$untrusted" = 1 ] && [ "$HAS_TOKEN" != true ]; then
-            echo "Set up Trusted Publishing for the packages above on npmjs.com (GitHub Actions, Weftsh/baste, npm.yml)"
+          if [ "$untrusted" = 1 ]; then
+            echo "On npmjs.com, each package's Trusted Publisher must be: GitHub Actions, Weftsh / baste, npm.yml, no environment"
             exit 1
           fi
       - name: Publish
-        env:
-          # Only used while Trusted Publishing isn't set up for a package.
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           # Pre-releases (v0.2.0-rc.1) go to the "next" dist-tag, not "latest".
           dist_tag=latest
