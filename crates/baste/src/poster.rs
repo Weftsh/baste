@@ -11,6 +11,36 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
+/// GitHub rejects commit status descriptions longer than this (characters).
+pub const MAX_DESCRIPTION: usize = 140;
+
+/// `s` cut to at most `max` characters, ending in "…" when shortened.
+pub fn shorten(s: &str, max: usize) -> String {
+    if s.chars().count() <= max {
+        return s.to_string();
+    }
+    let mut out: String = s.chars().take(max.saturating_sub(1)).collect();
+    out.truncate(out.trim_end().len());
+    out.push('…');
+    out
+}
+
+/// A description that fits GitHub's limit. The last " · " part (how to see
+/// the logs) is kept whole; the text before it is shortened.
+pub fn fit_description(description: &str) -> String {
+    if description.chars().count() <= MAX_DESCRIPTION {
+        return description.to_string();
+    }
+    match description.rfind(" · ") {
+        Some(i) if description[i..].chars().count() <= MAX_DESCRIPTION / 2 => {
+            let (head, tail) = description.split_at(i);
+            let room = MAX_DESCRIPTION - tail.chars().count();
+            format!("{}{tail}", shorten(head, room))
+        }
+        _ => shorten(description, MAX_DESCRIPTION),
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StatusUpdate {
     pub context: String,
@@ -56,7 +86,11 @@ impl StatusPoster {
 
     pub fn update(&self, update: StatusUpdate) {
         if let Some(tx) = &self.tx {
-            let _ = tx.send(Msg::Update(update));
+            let description = fit_description(&update.description);
+            let _ = tx.send(Msg::Update(StatusUpdate {
+                description,
+                ..update
+            }));
         }
     }
 
@@ -189,5 +223,50 @@ fn post_loop(
         } else {
             backoff = Duration::ZERO;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn short_descriptions_are_unchanged() {
+        let d = "Passed in 41s · baste logs q7hz2m";
+        assert_eq!(fit_description(d), d);
+        let exact = "x".repeat(MAX_DESCRIPTION);
+        assert_eq!(fit_description(&exact), exact);
+    }
+
+    #[test]
+    fn long_descriptions_keep_the_logs_command() {
+        let d = format!("Failed: {} · baste logs q7hz2m", "error ".repeat(40));
+        let fit = fit_description(&d);
+        assert_eq!(fit.chars().count(), MAX_DESCRIPTION);
+        assert!(fit.starts_with("Failed: error error"), "{fit}");
+        assert!(fit.ends_with("… · baste logs q7hz2m"), "{fit}");
+    }
+
+    #[test]
+    fn counts_characters_not_bytes() {
+        let d = format!("{} · run q7hz2m", "é".repeat(200));
+        let fit = fit_description(&d);
+        assert!(fit.chars().count() <= MAX_DESCRIPTION);
+        assert!(fit.ends_with(" · run q7hz2m"));
+    }
+
+    #[test]
+    fn without_a_separator_the_end_is_cut() {
+        let fit = fit_description(&"y".repeat(500));
+        assert_eq!(fit.chars().count(), MAX_DESCRIPTION);
+        assert!(fit.ends_with('…'));
+    }
+
+    #[test]
+    fn shorten_trims_to_the_limit() {
+        assert_eq!(shorten("Run tests", 60), "Run tests");
+        let s = shorten(&format!("Run {}", "a ".repeat(50)), 20);
+        assert_eq!(s.chars().count(), 20);
+        assert_eq!(s, "Run a a a a a a a a…");
     }
 }

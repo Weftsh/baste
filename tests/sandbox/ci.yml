@@ -1,0 +1,67 @@
+# Copy into a sandbox repository as .github/workflows/ci.yml to try Baste on
+# a real machine against real GitHub. See docs/manual-testing.md.
+name: CI
+on: push
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      arch: ${{ steps.info.outputs.arch }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: info
+        name: Inspect the machine
+        run: |
+          echo "user=$(id -un) arch=$(uname -m) kernel=$(uname -r)"
+          test "$(id -un)" = runner
+          sudo -n true
+          echo "arch=$(uname -m)" >> "$GITHUB_OUTPUT"
+      - name: A JavaScript action
+        uses: actions/github-script@v7
+        with:
+          script: console.log(`github-script sees ${context.repo.owner}/${context.repo.repo} at ${context.sha.slice(0, 7)}`)
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --version
+      - name: Docker (x86_64 images run through Rosetta on a Mac)
+        run: test "$(docker run --rm alpine:3.20 uname -m)" = x86_64
+      - run: echo "built from ${GITHUB_SHA::7}" > build.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: build
+          path: build.txt
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        shard: [1, 2]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: build
+      - run: echo "shard ${{ matrix.shard }} got $(cat build.txt), and the build ran on ${{ needs.build.outputs.arch }}"
+
+  # Commit a file named FAIL to see a failing check. The step's default name
+  # is its long command, which makes a long failure description.
+  maybe-fail:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: if [ -f FAIL ]; then echo "FAIL is committed, so this step fails on purpose, with a long command line that makes a long default step name"; exit 1; fi
+
+  # Needs the BASTE_DEMO secret: `baste secrets set BASTE_DEMO` locally, and
+  # `gh secret set BASTE_DEMO` for the same job on GitHub.
+  uses-a-secret:
+    runs-on: ubuntu-latest
+    steps:
+      - run: test -n "$DEMO" && echo "the secret is $DEMO, which the log masks"
+        env:
+          DEMO: ${{ secrets.BASTE_DEMO }}
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - run: echo "Baste hands this job to GitHub"

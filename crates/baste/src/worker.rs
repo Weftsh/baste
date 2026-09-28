@@ -180,7 +180,12 @@ impl Shared {
             JobState::Failed => match (record.failed_step(), &record.error) {
                 (Some(step), _) => (
                     "failure",
-                    format!("Failed at '{}' after {took} · baste logs {id}", step.name),
+                    // Keep room for the duration and run id: a run step's
+                    // default name is its whole command.
+                    format!(
+                        "Failed at '{}' after {took} · baste logs {id}",
+                        crate::poster::shorten(&step.name, 60)
+                    ),
                 ),
                 (None, Some(e)) if record.steps.len() <= 1 => (
                     "failure",

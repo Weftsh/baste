@@ -1,0 +1,13 @@
+# Copy into a sandbox repository as .github/workflows/pr.yml. Runs on a pull
+# request's test merge, which Baste builds locally. See docs/manual-testing.md.
+name: PR
+on: pull_request
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          git log --oneline -3
+          echo "event=${{ github.event_name }} head=${{ github.head_ref }} base=${{ github.base_ref }}"
+          test "${{ github.event_name }}" = pull_request

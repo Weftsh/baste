@@ -67,3 +67,21 @@ fn vm_e2e_workflow() {
         ]
     );
 }
+
+#[test]
+fn sandbox_workflows() {
+    let ci = load("tests/sandbox/ci.yml");
+    assert_eq!(
+        placements(&ci),
+        vec![
+            ("build".to_string(), true),
+            ("test (1)".to_string(), true),
+            ("test (2)".to_string(), true),
+            ("maybe-fail".to_string(), true),
+            ("uses-a-secret".to_string(), true),
+            ("windows".to_string(), false)
+        ]
+    );
+    let pr = load("tests/sandbox/pr.yml");
+    assert!(!pr.on.matches_push("refs/heads/main", None).unwrap());
+}

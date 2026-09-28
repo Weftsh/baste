@@ -170,6 +170,18 @@ fn handle(mut stream: TcpStream, state: &Mutex<State>) {
                 );
             }
             let v: Value = serde_json::from_slice(&body).unwrap_or(Value::Null);
+            // GitHub rejects descriptions longer than 140 characters.
+            if v["description"].as_str().unwrap_or("").chars().count() > 140 {
+                drop(st);
+                return json_resp(
+                    &mut stream,
+                    422,
+                    json!({"message": "Validation Failed", "errors": [{
+                        "resource": "Status", "code": "custom", "field": "description",
+                        "message": "description is too long (maximum is 140 characters)"
+                    }]}),
+                );
+            }
             st.statuses.push(Status {
                 sha: sha.to_string(),
                 state: v["state"].as_str().unwrap_or("").into(),

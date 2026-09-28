@@ -331,6 +331,46 @@ jobs:
 }
 
 #[test]
+fn long_status_descriptions_fit_githubs_limit() {
+    // A run step's default name is its command, so a failing step with a long
+    // command makes a long "Failed at '...'" description. GitHub rejects
+    // descriptions over 140 characters, which would leave the check pending.
+    let env = TestEnv::new();
+    env.write(
+        ".github/workflows/ci.yml",
+        r#"
+name: CI
+on: push
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - run: false && echo "a deliberately long command line, so that the default step name and the failure description run well past the 140 characters GitHub accepts"
+"#,
+    );
+    let sha = env.commit("first");
+    let out = env.baste(&["run", "--detach"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let id = env.runs()[0]["id"].as_str().unwrap().to_string();
+    let run = env.wait(&id, Duration::from_secs(60));
+    assert_eq!(run["state"], "failed");
+    let st = &env.github.latest(&sha)["baste/CI/unit"];
+    assert_eq!(st.state, "failure", "{}", st.description);
+    assert!(st.description.chars().count() <= 140, "{}", st.description);
+    assert!(
+        st.description.starts_with("Failed at 'Run false && echo"),
+        "{}",
+        st.description
+    );
+    // The run id, the one thing needed to find the logs, survives.
+    assert!(
+        st.description.ends_with(&format!("· baste logs {id}")),
+        "{}",
+        st.description
+    );
+}
+
+#[test]
 fn javascript_action_is_downloaded_and_cached() {
     let env = TestEnv::new();
     env.github.state.lock().unwrap().actions.insert(

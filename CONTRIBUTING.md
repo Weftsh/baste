@@ -19,7 +19,7 @@ VM changes have their own checks:
 
 - `scripts/qemu-smoke.sh` boots the Firecracker guest path under QEMU. It needs no KVM, so it runs on any Linux machine.
 - `scripts/firecracker-e2e.sh` runs a real workflow through Firecracker. It needs KVM and `sudo baste setup-network`.
-- For the Tart backend, test by hand on an Apple Silicon Mac: `baste image prepare --backend tart`, then `baste run` in a repository.
+- For the Tart backend and everything that talks to the real GitHub API, follow [docs/manual-testing.md](docs/manual-testing.md) on an Apple Silicon Mac (and a Linux machine with KVM).
 
 The website lives in `site/`: plain HTML in `site/public/` styled with Tailwind CSS v4, built with `npm ci && npm run build` and checked with `npm run check`. `npm run dev` rebuilds the stylesheet as you edit. The Pages workflow publishes it from `main`. Keep claims on the site to what Baste does today. `site/src/og.html` is the source of `site/public/og.png`, the link preview image.
 
