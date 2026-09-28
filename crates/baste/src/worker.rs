@@ -72,11 +72,16 @@ pub fn work(store: Store, git: Git, run_id: &str) -> Result<()> {
     let poster_api = api.clone().filter(|_| run.post_statuses);
     let poster = StatusPoster::start(poster_api, run.sha.clone(), wait);
 
+    let run = Arc::new(Mutex::new(run));
+    let saves = Arc::new(SaveState {
+        last: Mutex::new(Instant::now()),
+        unsaved: AtomicBool::new(false),
+    });
     let mut w = Worker {
         shared: Arc::new(Shared {
             store: store.clone(),
             git,
-            run: Mutex::new(run),
+            run: run.clone(),
             planned: vec![],
             backend: None,
             poster,
@@ -86,20 +91,42 @@ pub fn work(store: Store, git: Git, run_id: &str) -> Result<()> {
             actions: ActionCache::new(None),
             packs: PackCache::new(store.run_dir(run_id).join("checkout")),
             config,
-            last_save: Mutex::new(Instant::now()),
+            saves: saves.clone(),
         }),
     };
-    let result = w.run();
+    // Saves throttled updates that no later event would save: without it, a
+    // step that starts right after another stays invisible to `baste logs`
+    // until the next step changes, which can be many minutes. It holds only
+    // the run and the store, since setup needs `Shared` to itself.
+    let stop_saver = AtomicBool::new(false);
+    let result = std::thread::scope(|s| {
+        let (store, run, saves, stop) = (store.clone(), run.clone(), saves.clone(), &stop_saver);
+        s.spawn(move || {
+            while !stop.load(Ordering::Relaxed) {
+                std::thread::sleep(Duration::from_millis(100));
+                if saves.behind() {
+                    saves.save(&store, &run);
+                }
+            }
+        });
+        let result = w.run();
+        stop_saver.store(true, Ordering::Relaxed);
+        result
+    });
+    drop(run);
     let shared = Arc::get_mut(&mut w.shared).ok_or_else(|| anyhow!("job threads still running"))?;
+    let run = Arc::get_mut(&mut shared.run)
+        .ok_or_else(|| anyhow!("the run is still shared"))?
+        .get_mut()
+        .unwrap();
     if let Err(e) = &result {
-        let run = shared.run.get_mut().unwrap();
         run.error = Some(format!("{e:#}"));
         run.state = RunState::Error;
     }
     // Flush statuses (waiting for the push to land if needed).
     shared.poster.finish();
     let notes = shared.poster.notes.lock().unwrap().clone();
-    let run = shared.run.get_mut().unwrap();
+    let run = Arc::get_mut(&mut shared.run).unwrap().get_mut().unwrap();
     run.notes.extend(notes);
     run.finished_at.get_or_insert_with(Utc::now);
     run.worker_pid = None;
@@ -112,7 +139,7 @@ pub fn work(store: Store, git: Git, run_id: &str) -> Result<()> {
 struct Shared {
     store: Store,
     git: Git,
-    run: Mutex<Run>,
+    run: Arc<Mutex<Run>>,
     planned: Vec<PlannedWorkflow>,
     backend: Option<Arc<dyn Backend>>,
     poster: StatusPoster,
@@ -122,7 +149,34 @@ struct Shared {
     actions: ActionCache,
     packs: PackCache,
     config: Config,
-    last_save: Mutex<Instant>,
+    saves: Arc<SaveState>,
+}
+
+/// When the run record was last saved, and whether an update is waiting.
+struct SaveState {
+    last: Mutex<Instant>,
+    /// A throttled update hasn't been saved yet.
+    unsaved: AtomicBool,
+}
+
+impl SaveState {
+    fn save(&self, store: &Store, run: &Mutex<Run>) {
+        // Serialize saves (snapshot and write together) so job threads never
+        // interleave writes or replace a newer snapshot with an older one.
+        let mut last = self.last.lock().unwrap();
+        self.unsaved.store(false, Ordering::Relaxed);
+        let snapshot = run.lock().unwrap().clone();
+        let _ = store.save(&snapshot);
+        *last = Instant::now();
+    }
+
+    fn due(&self) -> bool {
+        self.last.lock().unwrap().elapsed() > Duration::from_millis(300)
+    }
+
+    fn behind(&self) -> bool {
+        self.unsaved.load(Ordering::Relaxed) && self.due()
+    }
 }
 
 impl Shared {
@@ -131,17 +185,14 @@ impl Shared {
     }
 
     fn save(&self) {
-        // Serialize saves (snapshot and write together) so job threads never
-        // interleave writes or replace a newer snapshot with an older one.
-        let mut last = self.last_save.lock().unwrap();
-        let run = self.run.lock().unwrap().clone();
-        let _ = self.store.save(&run);
-        *last = Instant::now();
+        self.saves.save(&self.store, &self.run);
     }
 
-    /// Save at most every 300ms (used for high-frequency step updates).
+    /// Save at most every 300ms (used for high-frequency step updates). An
+    /// update it skips is saved by the saver thread within 300ms.
     fn save_soon(&self) {
-        if self.last_save.lock().unwrap().elapsed() > Duration::from_millis(300) {
+        self.saves.unsaved.store(true, Ordering::Relaxed);
+        if self.saves.due() {
             self.save();
         }
     }

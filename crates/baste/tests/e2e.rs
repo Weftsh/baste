@@ -666,3 +666,55 @@ jobs:
     assert!(all.contains("no job matches --job nope"), "{all}");
     assert!(all.contains("vm-smoke (VM guest (QEMU))"), "{all}");
 }
+
+#[test]
+fn a_long_step_after_quick_ones_shows_up_while_it_runs() {
+    // Run records are saved at most every 300ms. Steps that start in quick
+    // succession must still reach the record (and `baste logs`) promptly,
+    // not when the long step ends.
+    let env = TestEnv::new();
+    env.write(
+        ".github/workflows/ci.yml",
+        r#"
+name: CI
+on: push
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - run: "true"
+      - run: "true"
+      - run: "true"
+      - name: Long
+        run: echo started && sleep 6
+"#,
+    );
+    env.commit("steps");
+    let out = env.baste(&["run", "--detach", "--no-status"]);
+    assert!(out.status.success(), "{}", stderr(&out));
+    let id = env.runs()[0]["id"].as_str().unwrap().to_string();
+    let start = std::time::Instant::now();
+    let seen = loop {
+        let run = env.run(&id);
+        let steps = run["jobs"][0]["steps"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        if steps
+            .iter()
+            .any(|s| s["name"] == "Long" && s["state"] == "running")
+        {
+            break true;
+        }
+        if start.elapsed() > Duration::from_secs(4) {
+            break false;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    };
+    assert!(
+        seen,
+        "the running step wasn't in the run record: {:#}",
+        env.run(&id)
+    );
+    env.wait(&id, Duration::from_secs(60));
+}
