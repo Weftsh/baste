@@ -37,8 +37,8 @@ Baste's promise is that a local pass predicts a GitHub pass. When adding support
 
 1. Go to **Actions → Release → Run workflow** on `main` and pick patch, minor or major.
 2. The run bumps the version in `Cargo.toml` and `Cargo.lock` and commits that to `main`. It then builds the Linux (x86_64, arm64) and macOS binaries and publishes the GitHub release with `SHA256SUMS`, which creates the `vX.Y.Z` tag. It points the gate action's major tag (`v1`) at the release, so `weftsh/baste/gate@v1` follows it; leave that input empty to keep the tag where it is. `install.sh` picks up the newest release.
-3. It then publishes to npm as `@weftsh/baste` (a small launcher) and `@weftsh/baste-<os>-<arch>` (the binaries), with provenance, using the `NPM_TOKEN` organization secret. `npm/build.mjs` builds those packages from the release archives.
+3. When the Release run succeeds, the **npm** workflow publishes it to npm as `@weftsh/baste` (a small launcher) and `@weftsh/baste-<os>-<arch>` (the binaries), with provenance. `npm/build.mjs` builds those packages from the release archives.
 
-If the npm step fails, for example because `NPM_TOKEN` expired, update the secret and run the **npm** workflow with the release's tag. Versions already on npm are skipped, so re-running is safe.
+`npm.yml` is the only workflow that publishes to npm. Each package trusts it on npmjs.com (Settings → Trusted Publisher: GitHub Actions, `Weftsh` / `baste`, workflow `npm.yml`, no environment), so no npm token is needed; the `NPM_TOKEN` secret is only a fallback for a package without that setting. If publishing fails, fix the cause and run the **npm** workflow with the release's tag. Versions already on npm are skipped, so re-running is safe.
 
 The version bump is pushed straight to `main` by the workflow. If `main` is protected, let GitHub Actions bypass that rule, or bump the version in a pull request and push the `vX.Y.Z` tag instead, which releases that commit without a bump.

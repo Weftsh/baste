@@ -1,15 +1,18 @@
 name: npm
 
 # Publishes a GitHub release's binaries to npm as @weftsh/baste plus one
-# package per platform. The Release workflow calls this after publishing;
-# run it by hand to (re)publish an existing release. Versions already on
-# npm are skipped, so re-running is safe.
+# package per platform. It starts on its own when a Release run succeeds;
+# run it by hand with a tag to (re)publish an existing release. Versions
+# already on npm are skipped, so re-running is safe.
+#
+# This is the only workflow that publishes to npm, so it is the one to name
+# in each package's Trusted Publisher settings on npmjs.com (npm.yml). With
+# that in place npm authenticates the run through GitHub's OIDC token; until
+# then the NPM_TOKEN secret is used.
 on:
-  workflow_call:
-    inputs:
-      tag:
-        type: string
-        required: true
+  workflow_run:
+    workflows: [Release]
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
@@ -18,19 +21,34 @@ on:
 
 permissions:
   contents: read
+  actions: read
   id-token: write
 
 jobs:
   publish:
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    env:
-      TAG: ${{ inputs.tag }}
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v7
         with:
           node-version: 24
           registry-url: https://registry.npmjs.org
+      - name: Find the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          tag=$INPUT_TAG
+          if [ -z "$tag" ]; then
+            # The Release run records the tag it published.
+            gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" --name release-tag --dir release-tag
+            tag=$(cat release-tag/tag)
+          fi
+          echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+' || { echo "'$tag' is not a version tag"; exit 1; }
+          echo "TAG=$tag" >> "$GITHUB_ENV"
+          echo "Publishing $tag"
       - name: Download the release binaries
         env:
           GH_TOKEN: ${{ github.token }}
@@ -41,16 +59,17 @@ jobs:
         run: node npm/build.mjs "$TAG" release dist | tee order.txt
       - name: Publish
         env:
+          # Only used while Trusted Publishing isn't set up for a package.
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          test -n "$NODE_AUTH_TOKEN" || { echo "The NPM_TOKEN secret isn't available to this repository"; exit 1; }
           # Pre-releases (v0.2.0-rc.1) go to the "next" dist-tag, not "latest".
           dist_tag=latest
           case "$TAG" in *-*) dist_tag=next ;; esac
           while read -r dir; do
             name=$(node -p "require('./$dir/package.json').name")
             version=$(node -p "require('./$dir/package.json').version")
-            if npm view "$name@$version" version >/dev/null 2>&1; then
+            # Ask the registry directly (no auth) whether this version exists.
+            if curl -fsS -o /dev/null "https://registry.npmjs.org/${name/\//%2f}/$version"; then
               echo "$name@$version is already on npm"
               continue
             fi

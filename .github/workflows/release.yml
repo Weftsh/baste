@@ -2,8 +2,9 @@ name: Release
 
 # To ship an update: Actions tab → Release → Run workflow, and pick patch,
 # minor or major. The run bumps the version on main, builds the Linux and
-# macOS binaries, publishes the GitHub release (which creates the tag),
-# points the gate action's major tag at it, and publishes to npm.
+# macOS binaries, publishes the GitHub release (which creates the tag) and
+# points the gate action's major tag at it. When it succeeds, the npm
+# workflow publishes the release to npm.
 #
 # Pushing a vX.Y.Z tag that matches the version in Cargo.toml releases that
 # commit the same way, without the version bump or the gate tag.
@@ -188,13 +189,9 @@ jobs:
         run: |
           git tag -f "$GATE_TAG" "$SHA"
           git push -f origin "refs/tags/$GATE_TAG"
-
-  npm:
-    needs: [version, publish]
-    permissions:
-      contents: read
-      id-token: write
-    uses: ./.github/workflows/npm.yml
-    with:
-      tag: ${{ needs.version.outputs.tag }}
-    secrets: inherit
+      - name: Record the tag for the npm workflow
+        run: mkdir -p release-tag && echo "$TAG" > release-tag/tag
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-tag
+          path: release-tag
