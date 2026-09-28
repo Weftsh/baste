@@ -27,6 +27,20 @@ fn tart_bin() -> String {
     std::env::var("BASTE_TART").unwrap_or_else(|_| "tart".into())
 }
 
+/// Whether this Tart can give VMs nested virtualization (`tart run --nested`,
+/// "if possible": Apple silicon from M3 on macOS 15 and later). With it, jobs
+/// get /dev/kvm and can run VMs of their own, as on GitHub's runners.
+fn supports_nested() -> bool {
+    static NESTED: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *NESTED.get_or_init(|| {
+        Command::new(tart_bin())
+            .args(["run", "--help"])
+            .stdin(Stdio::null())
+            .output()
+            .is_ok_and(|o| String::from_utf8_lossy(&o.stdout).contains("--nested"))
+    })
+}
+
 fn tart(args: &[&str]) -> Result<String> {
     let out = Command::new(tart_bin())
         .args(args)
@@ -80,6 +94,9 @@ impl Tart {
         let log = std::fs::File::create(log_path)?;
         let mut cmd = Command::new(tart_bin());
         cmd.args(["run", name, "--no-graphics", "--rosetta=rosetta"]);
+        if supports_nested() {
+            cmd.arg("--nested");
+        }
         if let Some(dir) = share {
             cmd.arg(format!("--dir=baste:{}:ro", dir.display()));
         }
