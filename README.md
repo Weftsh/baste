@@ -167,7 +167,7 @@ baste secrets set NPM_TOKEN            # prompts, or reads stdin
 baste secrets set SENTRY_DSN --global  # for every repository
 ```
 
-A job that references a secret you haven't set fails before any step runs, with a message naming the secret. On macOS, the first time a new version of Baste reads your secrets, macOS asks whether it may use them; choose **Always Allow**. Values are masked in logs. On headless machines without a keychain, you can opt in to a private `0600` file with `BASTE_SECRETS_FILE=~/.config/baste/secrets.json`.
+A job that references a secret you haven't set fails before any step runs, with a message naming the secret. On macOS, Baste stores them through Apple's `security` tool, so upgrading Baste doesn't bring up Keychain prompts. Secrets stored by Baste 0.1.4 or earlier prompt once; storing them again with `baste secrets set` avoids that. Values are masked in logs. On headless machines without a keychain, you can opt in to a private `0600` file with `BASTE_SECRETS_FILE=~/.config/baste/secrets.json`.
 
 `GITHUB_TOKEN` (and `github.token`) in local runs is your gh CLI token. It usually has broader scopes than GitHub's per-job token and doesn't expire with the job, so any action in the run can use it. Baste masks it in logs and warns about it at `init`.
 

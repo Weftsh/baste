@@ -1,12 +1,10 @@
 //! Local secrets, kept in the OS keychain and never fetched from GitHub.
 //!
-//! macOS uses the login Keychain. Linux (and WSL2) uses the Secret Service via
-//! `secret-tool`. Machines without either can opt in to a `0600` JSON file by
+//! macOS uses the login Keychain, through Apple's `security` tool. Linux (and
+//! WSL2) uses the Secret Service via `secret-tool`. Machines without either can opt in to a `0600` JSON file by
 //! setting `BASTE_SECRETS_FILE`.
 
-#[cfg(target_os = "macos")]
-use anyhow::anyhow;
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use serde_json::{Map, Value};
 use std::collections::BTreeSet;
 use std::io::Write;
@@ -102,20 +100,7 @@ impl Secrets {
     fn get_raw(&self, account: &str) -> Result<Option<String>> {
         match &self.backend {
             #[cfg(target_os = "macos")]
-            Backend::Keychain => {
-                match security_framework::passwords::get_generic_password(SERVICE, account) {
-                    Ok(bytes) => Ok(Some(String::from_utf8_lossy(&bytes).into_owned())),
-                    Err(e) if e.code() == -25300 => Ok(None), // errSecItemNotFound
-                    // errSecUserCanceled, errSecInteractionNotAllowed, errSecAuthFailed:
-                    // macOS asks before a different build of Baste reads an item.
-                    Err(e) if matches!(e.code(), -128 | -25308 | -25293) => Err(anyhow!(
-                        "macOS asked whether this version of Baste may read a secret from your \
-                         Keychain, and it wasn't allowed ({e}). Each new Baste version asks once: \
-                         choose Always Allow when the prompt appears, then `baste rerun`"
-                    )),
-                    Err(e) => Err(anyhow!("reading from the Keychain: {e}")),
-                }
-            }
+            Backend::Keychain => keychain::get(account),
             Backend::SecretTool => {
                 let out = Command::new("secret-tool")
                     .args(["lookup", "service", SERVICE, "account", account])
@@ -143,12 +128,7 @@ impl Secrets {
     fn set_raw(&self, account: &str, value: &str) -> Result<()> {
         match &self.backend {
             #[cfg(target_os = "macos")]
-            Backend::Keychain => security_framework::passwords::set_generic_password(
-                SERVICE,
-                account,
-                value.as_bytes(),
-            )
-            .map_err(|e| anyhow!("writing to the Keychain: {e}")),
+            Backend::Keychain => keychain::set(account, value),
             Backend::SecretTool => {
                 let mut child = Command::new("secret-tool")
                     .args([
@@ -184,10 +164,7 @@ impl Secrets {
     fn delete_raw(&self, account: &str) -> Result<()> {
         match &self.backend {
             #[cfg(target_os = "macos")]
-            Backend::Keychain => {
-                let _ = security_framework::passwords::delete_generic_password(SERVICE, account);
-                Ok(())
-            }
+            Backend::Keychain => keychain::delete(account),
             Backend::SecretTool => {
                 let _ = Command::new("secret-tool")
                     .args(["clear", "service", SERVICE, "account", account])
@@ -200,6 +177,131 @@ impl Secrets {
                 write_file(p, &map)
             }
         }
+    }
+}
+
+/// The login Keychain through Apple's `security` tool, not the Keychain API.
+///
+/// macOS lets an item's creator read it without asking and prompts any other
+/// app for the login password. Baste's binaries aren't signed with a
+/// Developer ID, so to macOS every Baste version is a new app, and a run
+/// started by `git push` would stop at a password prompt after each upgrade.
+/// `/usr/bin/security` is signed by Apple and the same across upgrades, so
+/// items it creates stay readable without prompts. (Items stored by Baste
+/// 0.1.4 and earlier belong to that Baste binary; macOS asks once about them.)
+#[cfg(target_os = "macos")]
+mod keychain {
+    use super::{parse_password_line, SERVICE};
+    use anyhow::{anyhow, bail, Context, Result};
+    use std::io::Write;
+    use std::process::{Command, Output, Stdio};
+
+    const SECURITY: &str = "/usr/bin/security";
+    /// `security`'s exit status for errSecItemNotFound.
+    const NOT_FOUND: i32 = 44;
+
+    fn run(args: &[&str]) -> Result<Output> {
+        Command::new(SECURITY)
+            .args(args)
+            .stdin(Stdio::null())
+            .output()
+            .context("running /usr/bin/security")
+    }
+
+    fn failure(action: &str, out: &Output) -> anyhow::Error {
+        let msg = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        if msg.contains("User canceled") || msg.contains("User interaction is not allowed") {
+            anyhow!(
+                "{action} the Keychain: macOS asked whether to allow it, and it wasn't allowed. \
+                 This happens once for secrets stored by Baste 0.1.4 or earlier: choose Always \
+                 Allow (it asks for your Mac login password), or store the secret again with \
+                 `baste secrets set`."
+            )
+        } else {
+            anyhow!("{action} the Keychain: {msg}")
+        }
+    }
+
+    pub fn get(account: &str) -> Result<Option<String>> {
+        let out = run(&["find-generic-password", "-s", SERVICE, "-a", account, "-g"])?;
+        if out.status.code() == Some(NOT_FOUND) {
+            return Ok(None);
+        }
+        if !out.status.success() {
+            return Err(failure("reading from", &out));
+        }
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        let line = stderr
+            .lines()
+            .find(|l| l.starts_with("password:"))
+            .ok_or_else(|| anyhow!("reading from the Keychain: no password in the reply"))?;
+        let bytes = parse_password_line(line)?;
+        String::from_utf8(bytes)
+            .map(Some)
+            .map_err(|_| anyhow!("the Keychain item for {account} isn't valid UTF-8"))
+    }
+
+    pub fn set(account: &str, value: &str) -> Result<()> {
+        if account.contains(['"', '\\', '\n']) {
+            bail!("can't store a secret under the name {account:?}");
+        }
+        // Items stored by older Baste versions belong to that binary, and
+        // updating one would prompt: replace it instead.
+        delete(account)?;
+        // The command goes to `security -i` on stdin, with the value as hex,
+        // so the value never appears in a process list.
+        let mut child = Command::new(SECURITY)
+            .arg("-i")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .context("running /usr/bin/security")?;
+        let command = format!(
+            "add-generic-password -U -s {SERVICE} -a \"{account}\" -X {}\n",
+            hex::encode(value.as_bytes())
+        );
+        child.stdin.take().unwrap().write_all(command.as_bytes())?;
+        let out = child.wait_with_output()?;
+        if !out.status.success() || !out.stderr.is_empty() {
+            return Err(failure("writing to", &out));
+        }
+        // `security -i` can't report every failure through its exit status.
+        match get(account)? {
+            Some(stored) if stored == value => Ok(()),
+            _ => bail!("writing to the Keychain: the secret didn't read back"),
+        }
+    }
+
+    pub fn delete(account: &str) -> Result<()> {
+        let out = run(&["delete-generic-password", "-s", SERVICE, "-a", account])?;
+        if out.status.success() || out.status.code() == Some(NOT_FOUND) {
+            Ok(())
+        } else {
+            Err(failure("deleting from", &out))
+        }
+    }
+}
+
+/// The value from `security find-generic-password -g`'s `password:` line:
+/// `password: "text"` for printable values, `password: 0x<HEX>  "..."`
+/// otherwise, and `password: ` for an empty one.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+fn parse_password_line(line: &str) -> Result<Vec<u8>> {
+    let rest = line
+        .strip_prefix("password:")
+        .ok_or_else(|| anyhow!("unexpected Keychain reply"))?
+        .trim_start();
+    if let Some(hex) = rest.strip_prefix("0x") {
+        let hex = hex.split_whitespace().next().unwrap_or("");
+        return hex::decode(hex).map_err(|e| anyhow!("unexpected Keychain reply: {e}"));
+    }
+    if rest.is_empty() {
+        return Ok(Vec::new());
+    }
+    match rest.strip_prefix('"').and_then(|r| r.strip_suffix('"')) {
+        Some(text) => Ok(text.as_bytes().to_vec()),
+        None => bail!("unexpected Keychain reply"),
     }
 }
 
@@ -294,6 +396,25 @@ fn write_file(p: &PathBuf, map: &Map<String, Value>) -> Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_security_password_lines() {
+        // Replies seen from `security find-generic-password -g` on macOS 26.
+        let p = |l: &str| String::from_utf8(parse_password_line(l).unwrap()).unwrap();
+        assert_eq!(p(r#"password: "plain value""#), "plain value");
+        // A printable value that looks like hex stays text.
+        assert_eq!(p(r#"password: "deadbeef""#), "deadbeef");
+        assert_eq!(p(r#"password: "say "hi" \ ok""#), r#"say "hi" \ ok"#);
+        // Anything unprintable comes as hex, followed by an escaped copy.
+        assert_eq!(
+            p(
+                r#"password: 0x68C3A96C6C6F202271756F746564222024785C6E  "h\303\251llo "quoted" $x\134n""#
+            ),
+            "héllo \"quoted\" $x\\n"
+        );
+        assert_eq!(p("password: "), "");
+        assert!(parse_password_line("nonsense").is_err());
+    }
 
     #[test]
     fn names_are_validated() {
