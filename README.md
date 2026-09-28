@@ -57,7 +57,7 @@ Either way you get one native binary for your platform (on macOS, plus the Linux
 
 | Host | Backend | Setup |
 | --- | --- | --- |
-| macOS 14+, Apple Silicon | [Tart](https://tart.run), with Rosetta for x86_64 | `brew install cirruslabs/cli/tart`<br>`softwareupdate --install-rosetta --agree-to-license` |
+| macOS 14+, Apple Silicon | [Tart](https://tart.run), with Rosetta for x86_64 | `brew install cirruslabs/cli/tart` (or `tart.app` from its [releases](https://github.com/cirruslabs/tart/releases), with `tart.app/Contents/MacOS/tart` on your `PATH`)<br>`softwareupdate --install-rosetta --agree-to-license` |
 | Linux (x86_64, arm64) | [Firecracker](https://firecracker-microvm.github.io) | `sudo usermod -aG kvm $USER` (then log in again)<br>install `e2fsprogs`<br>`sudo "$(command -v baste)" setup-network` |
 | Windows 11 | Firecracker inside WSL2 | Set `nestedVirtualization=true` under `[wsl2]` in `%UserProfile%\.wslconfig` and run `wsl --shutdown`. Then do every step on this page inside WSL2, including the Linux setup. |
 
@@ -167,7 +167,7 @@ baste secrets set NPM_TOKEN            # prompts, or reads stdin
 baste secrets set SENTRY_DSN --global  # for every repository
 ```
 
-A job that references a secret you haven't set fails before any step runs, with a message naming the secret. Values are masked in logs. On headless machines without a keychain, you can opt in to a private `0600` file with `BASTE_SECRETS_FILE=~/.config/baste/secrets.json`.
+A job that references a secret you haven't set fails before any step runs, with a message naming the secret. On macOS, the first time a new version of Baste reads your secrets, macOS asks whether it may use them; choose **Always Allow**. Values are masked in logs. On headless machines without a keychain, you can opt in to a private `0600` file with `BASTE_SECRETS_FILE=~/.config/baste/secrets.json`.
 
 `GITHUB_TOKEN` (and `github.token`) in local runs is your gh CLI token. It usually has broader scopes than GitHub's per-job token and doesn't expire with the job, so any action in the run can use it. Baste masks it in logs and warns about it at `init`.
 

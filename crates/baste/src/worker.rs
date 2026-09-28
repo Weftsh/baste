@@ -1234,10 +1234,11 @@ fn prepare_and_run(
     rec: &mut JobRecorder,
 ) -> Result<()> {
     let pw = &shared.planned[task.pw];
-    let job = pw
-        .workflow
-        .job(&task.job_id)
-        .ok_or_else(|| anyhow!("job {} disappeared", task.job_id))?;
+    let job = &bundle::for_local_run(
+        pw.workflow
+            .job(&task.job_id)
+            .ok_or_else(|| anyhow!("job {} disappeared", task.job_id))?,
+    );
     let record = shared
         .run
         .lock()

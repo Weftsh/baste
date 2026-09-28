@@ -32,7 +32,7 @@ fn tart(args: &[&str]) -> Result<String> {
         .args(args)
         .stdin(Stdio::null())
         .output()
-        .context("running tart (install it with `brew install cirruslabs/cli/tart`)")?;
+        .context("running tart (install it with `brew install cirruslabs/cli/tart`, or from https://github.com/cirruslabs/tart/releases)")?;
     if !out.status.success() {
         bail!(
             "tart {} failed: {}",
@@ -163,7 +163,10 @@ impl Backend for Tart {
         });
         checks.push(match tart(&["--version"]) {
             Ok(v) => Check::pass("Tart", v),
-            Err(_) => Check::fail("Tart", "not installed: `brew install cirruslabs/cli/tart`"),
+            Err(_) => Check::fail(
+                "Tart",
+                "not installed: `brew install cirruslabs/cli/tart`, or download tart.app from https://github.com/cirruslabs/tart/releases",
+            ),
         });
         checks.push(
             if Path::new("/Library/Apple/usr/share/rosetta/rosetta").exists() {

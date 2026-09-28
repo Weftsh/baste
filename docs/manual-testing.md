@@ -7,7 +7,7 @@ For each step, the **Expect** line is what should happen. When something else ha
 ## 0. Prerequisites
 
 - The [GitHub CLI](https://cli.github.com), logged in: `gh auth status`.
-- **macOS 14+ on Apple Silicon:** `brew install cirruslabs/cli/tart` and `softwareupdate --install-rosetta --agree-to-license`.
+- **macOS 14+ on Apple Silicon:** `brew install cirruslabs/cli/tart` and `softwareupdate --install-rosetta --agree-to-license`. If the Homebrew tap fails, download `tart.tar.gz` from [Tart's releases](https://github.com/cirruslabs/tart/releases), move `tart.app` to `~/Applications`, and link `~/Applications/tart.app/Contents/MacOS/tart` into a directory on your `PATH`.
 - **Linux:** `/dev/kvm` access (`sudo usermod -aG kvm $USER`, then log in again) and `e2fsprogs`.
 - About 20 GB of free disk for the VM image.
 
@@ -56,7 +56,7 @@ Negative check, if you can: with `gh auth logout`, `baste init` stops, says to l
 time baste image prepare
 ```
 
-**Expect:** it downloads the pinned image, verifies it, provisions it once (packages, Node.js, Docker, the `runner` user) and finishes without errors. Note how long it takes and how much disk it uses (`du -sh ~/Library/Caches/baste` on macOS, `~/.cache/baste` on Linux). A second run is quick.
+**Expect:** it downloads the pinned image, verifies it, provisions it once (packages, Node.js, Docker, the `runner` user) and finishes without errors. Note how long it takes and how much disk it uses (`du -sh ~/.tart` on macOS, where Tart keeps the images; `du -sh ~/.cache/baste` on Linux). A second run is quick.
 
 ## 5. A passing push
 

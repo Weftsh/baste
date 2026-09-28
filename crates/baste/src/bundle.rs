@@ -97,6 +97,46 @@ impl ActionCache {
 
 /// Every remote action a job uses, including those used by composite actions
 /// (remote or local), as `(owner, repo, ref)`.
+/// What the gate action reports in a local run.
+const LOCAL_GATE_SCRIPT: &str =
+    "echo \"This is Baste's local run, so the gate lets every job run.\"\n\
+echo skip=false >> \"$GITHUB_OUTPUT\"\n\
+echo result=local >> \"$GITHUB_OUTPUT\"\n";
+
+fn is_gate_action(uses: &str) -> bool {
+    matches!(
+        Uses::parse(uses),
+        Ok(Uses::Remote { owner, repo, path, .. })
+            if owner.eq_ignore_ascii_case("weftsh")
+                && repo.eq_ignore_ascii_case("baste")
+                && path.as_deref() == Some("gate")
+    )
+}
+
+/// The job as a local run executes it. A step using Baste's gate action
+/// (`weftsh/baste/gate`) becomes one that lets every job run: the gate skips
+/// GitHub's copy of jobs that already passed locally, and asked from inside
+/// a local run it would wait on that run's own pending checks. The step keeps
+/// its `id`, `name` and `if`, so `steps.<id>.outputs.skip` works as usual.
+pub fn for_local_run(job: &Job) -> Job {
+    let mut job = job.clone();
+    for step in &mut job.steps {
+        let gate = step
+            .get("uses")
+            .and_then(scalar_string)
+            .is_some_and(|u| is_gate_action(&u));
+        let Some(fields) = step.as_object_mut().filter(|_| gate) else {
+            continue;
+        };
+        fields.remove("uses");
+        fields.remove("with");
+        fields.entry("name").or_insert_with(|| json!("Baste gate"));
+        fields.insert("shell".into(), json!("bash"));
+        fields.insert("run".into(), json!(LOCAL_GATE_SCRIPT));
+    }
+    job
+}
+
 pub fn collect_actions(
     job: &Job,
     git: &Git,

@@ -27,7 +27,20 @@ locale-gen en_US.UTF-8 >/dev/null || true
 echo "::endgroup::"
 
 echo "::group::Runner user"
-id runner >/dev/null 2>&1 || useradd -m -u 1001 -s /bin/bash runner
+if ! id runner >/dev/null 2>&1; then
+  # GitHub's runner user has UID 1001, which some workflows rely on. Cirrus
+  # Labs' Ubuntu image (Tart) gives 1001 to its unused stock `ubuntu` user,
+  # so remove that one. Any other owner keeps 1001 and runner gets a free UID.
+  owner=$(getent passwd 1001 | cut -d: -f1 || true)
+  if [ "$owner" = ubuntu ]; then
+    userdel -r ubuntu 2>/dev/null || userdel ubuntu
+  fi
+  if getent passwd 1001 >/dev/null; then
+    useradd -m -s /bin/bash runner
+  else
+    useradd -m -u 1001 -s /bin/bash runner
+  fi
+fi
 usermod -aG docker runner
 echo 'runner ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/runner
 chmod 0440 /etc/sudoers.d/runner

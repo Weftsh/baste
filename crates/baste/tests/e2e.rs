@@ -586,3 +586,45 @@ fn uninstall_restores_hook() {
         "#!/bin/sh\necho mine\n"
     );
 }
+
+#[test]
+fn gate_action_lets_every_job_run_locally() {
+    // Asked from inside a local run, the gate would wait on that run's own
+    // pending checks. Locally it always says "don't skip".
+    let env = TestEnv::new();
+    env.write(
+        ".github/workflows/ci.yml",
+        r#"
+name: CI
+on: push
+jobs:
+  baste-gate:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.gate.outputs.skip }}
+    steps:
+      - id: gate
+        uses: weftsh/baste/gate@v1
+  build:
+    needs: baste-gate
+    if: needs.baste-gate.outputs.skip != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "the gate said skip=${{ needs.baste-gate.outputs.skip }}"
+"#,
+    );
+    env.commit("gated");
+    let started = std::time::Instant::now();
+    let out = env.baste(&["run"]);
+    let text = stdout(&out);
+    assert!(out.status.success(), "{text}\n{}", stderr(&out));
+    assert!(
+        text.contains("Baste's local run, so the gate lets every job run"),
+        "{text}"
+    );
+    assert!(text.contains("the gate said skip=false"), "{text}");
+    assert!(
+        started.elapsed() < Duration::from_secs(60),
+        "the gate waited"
+    );
+}

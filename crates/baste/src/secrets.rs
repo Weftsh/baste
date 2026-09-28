@@ -106,6 +106,13 @@ impl Secrets {
                 match security_framework::passwords::get_generic_password(SERVICE, account) {
                     Ok(bytes) => Ok(Some(String::from_utf8_lossy(&bytes).into_owned())),
                     Err(e) if e.code() == -25300 => Ok(None), // errSecItemNotFound
+                    // errSecUserCanceled, errSecInteractionNotAllowed, errSecAuthFailed:
+                    // macOS asks before a different build of Baste reads an item.
+                    Err(e) if matches!(e.code(), -128 | -25308 | -25293) => Err(anyhow!(
+                        "macOS asked whether this version of Baste may read a secret from your \
+                         Keychain, and it wasn't allowed ({e}). Each new Baste version asks once: \
+                         choose Always Allow when the prompt appears, then `baste rerun`"
+                    )),
                     Err(e) => Err(anyhow!("reading from the Keychain: {e}")),
                 }
             }

@@ -8,7 +8,7 @@ branding:
   color: green
 inputs:
   token:
-    description: Token that can read commit statuses (needs `statuses: read`).
+    description: "Token that can read commit statuses (needs `statuses: read`)."
     default: ${{ github.token }}
   workflow:
     description: >

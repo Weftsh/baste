@@ -85,3 +85,12 @@ fn sandbox_workflows() {
     let pr = load("tests/sandbox/pr.yml");
     assert!(!pr.on.matches_push("refs/heads/main", None).unwrap());
 }
+
+#[test]
+fn gate_action_metadata_parses() {
+    // GitHub refuses to load an action whose action.yml isn't valid YAML.
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../gate/action.yml");
+    let meta = baste_workflow::ActionMeta::parse(&std::fs::read_to_string(path).unwrap())
+        .unwrap_or_else(|e| panic!("gate/action.yml: {e}"));
+    assert!(matches!(meta.runs, baste_workflow::Runs::Composite { .. }));
+}
