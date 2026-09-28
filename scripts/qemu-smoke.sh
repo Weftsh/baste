@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Boot Baste's Firecracker guest path under QEMU's microvm machine, which
-# needs no KVM (software emulation is slow but fine). It checks the parts that
-# only run inside the VM:
+# Boot Baste's Firecracker guest path under QEMU (microvm on x86_64, virt on
+# aarch64), which needs no KVM (software emulation is slow but fine). It
+# boots the guest for the machine's own architecture, or $ARCH. It checks the
+# parts that only run inside the VM:
 #
 #  1. a `prepare` boot: our initramfs /init, the overlay root, the hand-off to
 #     systemd, the injected agent service reading its bundle from a raw block
@@ -16,6 +17,22 @@
 #
 # Usage: scripts/qemu-smoke.sh <static linux baste> <vmlinux> <rootfs.squashfs>
 set -euo pipefail
+
+ARCH=${ARCH:-$(uname -m)}
+case "$ARCH" in
+  x86_64)
+    QEMU=(qemu-system-x86_64 -M microvm,pit=on,pic=on,rtc=on -cpu max)
+    CONSOLE_ARGS="console=ttyS0 earlyprintk=serial,ttyS0 tsc_early_khz=2000000"
+    ;;
+  aarch64)
+    # Firecracker's arm64 kernel has no driver for the virt machine's PL011
+    # serial port, so its console is a second virtio console (hvc1; the
+    # events use hvc0).
+    QEMU=(qemu-system-aarch64 -M virt -cpu max)
+    CONSOLE_ARGS="console=hvc1"
+    ;;
+  *) echo "no QEMU setup for $ARCH" >&2; exit 1 ;;
+esac
 
 BASTE=$(realpath "$1")
 KERNEL=$(realpath "$2")
@@ -33,25 +50,49 @@ make_tar() { # dir out
   truncate -s $(( (size + 511) / 512 * 512 + 4096 )) "$2"
 }
 
-boot() { # name mode args...
+console_device() { # name
+  if [ "$ARCH" = aarch64 ]; then
+    echo "-serial none"
+  else
+    echo "-serial file:$W/$1-console.log"
+  fi
+}
+
+# On aarch64 the kernel console is a virtio console after the events one.
+extra_console() { # name
+  if [ "$ARCH" = aarch64 ]; then
+    echo "-chardev file,id=con,path=$W/$1-console.log -device virtconsole,chardev=con"
+  fi
+}
+
+boot() { # name mode [-drive ... -device ...]...
   local name=$1 mode=$2
   shift 2
+  # The virt machine (aarch64) numbers virtio disks in reverse of the order
+  # they're given; reverse them so /dev/vda is still the first one.
+  if [ "$ARCH" = aarch64 ]; then
+    local disks=("$@") reversed=() i
+    for (( i=${#disks[@]}-4; i>=0; i-=4 )); do
+      reversed+=("${disks[@]:i:4}")
+    done
+    set -- "${reversed[@]}"
+  fi
   : > "$W/$name-events.log"
   echo "Booting '$name' under QEMU (software emulation)…"
   set +e
-  timeout "${TIMEOUT:-900}" qemu-system-x86_64 \
-    -M microvm,pit=on,pic=on,rtc=on -cpu max -m 1024 -smp 2 \
+  timeout "${TIMEOUT:-900}" "${QEMU[@]}" -m 1024 -smp 2 \
     -nodefaults -no-user-config -nographic -no-reboot \
-    -serial "file:$W/$name-console.log" \
+    $(console_device "$name") \
     -kernel "$KERNEL" -initrd "$W/initramfs.cpio" \
-    -append "console=ttyS0 earlyprintk=serial,ttyS0 reboot=k panic=1 tsc_early_khz=2000000 ip=10.0.2.15::10.0.2.2:255.255.255.0::eth0:off baste.mode=$mode baste.events=/dev/hvc0 baste.dns=10.0.2.3 $BOOT_ARGS" \
+    -append "$CONSOLE_ARGS reboot=k panic=1 ip=10.0.2.15::10.0.2.2:255.255.255.0::eth0:off baste.mode=$mode baste.events=/dev/hvc0 baste.dns=10.0.2.3 $BOOT_ARGS" \
     "$@" \
     -netdev user,id=n0 -device virtio-net-device,netdev=n0 \
-    -device virtio-serial-device -chardev "file,id=ev,path=$W/$name-events.log" -device virtconsole,chardev=ev
+    -device virtio-serial-device -chardev "file,id=ev,path=$W/$name-events.log" -device virtconsole,chardev=ev \
+    $(extra_console "$name")
   local status=$?
   set -e
-  echo "--- $name console (last 15 lines) ---"
-  tail -n 15 "$W/$name-console.log" || true
+  echo "--- $name console (last ${CONSOLE_LINES:-40} lines) ---"
+  tail -n "${CONSOLE_LINES:-40}" "$W/$name-console.log" || true
   echo "--- $name events ---"
   cat "$W/$name-events.log"
   echo
@@ -61,7 +102,7 @@ boot() { # name mode args...
   fi
   # With -no-reboot, a guest that resets (a kernel fault or panic) ends QEMU
   # with status 0. Say so, since the console may show nothing after the BIOS.
-  if ! grep -q "Linux version" "$W/$name-console.log"; then
+  if ! grep -qE "Linux version|Run /init|Kernel panic" "$W/$name-console.log"; then
     echo "The guest reset before the kernel started (QEMU exited with status 0)" >&2
   fi
   grep -q '"type":"job_finished","result":"success"' "$W/$name-events.log" || { echo "$name did not succeed" >&2; exit 1; }
@@ -122,7 +163,7 @@ BOOT_ARGS="baste.lower=/dev/vda baste.prepared=/dev/vdb baste.upper=/dev/vdc bas
   -drive "id=bundle,file=$W/bundle.tar,format=raw,if=none,readonly=on" -device virtio-blk-device,drive=bundle
 
 check() { grep -q "$1" "$W/run-events.log" || { echo "missing in run events: $1" >&2; exit 1; }; }
-check 'hello from Linux x86_64 as runner'
+check "hello from Linux $ARCH as runner"
 check 'root=overlay'
 check 'marker=provisioned'
 check 'docker-dir=ext4'

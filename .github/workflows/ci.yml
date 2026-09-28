@@ -44,22 +44,42 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      # The guest for this machine's architecture: x86_64 on GitHub, aarch64
+      # when Baste runs this job on an Apple Silicon Mac.
+      - name: Pick the guest architecture
+        run: |
+          arch=$(uname -m)
+          case "$arch" in
+            x86_64) qemu=qemu-system-x86
+              kernel_sha=b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724
+              rootfs_sha=2332f3bb101fc8645c6322c7445acd353a51845a33e66b58c711905d685b2aa7 ;;
+            aarch64) qemu=qemu-system-arm
+              kernel_sha=69aa3308219ec1a070bc9a8e7f80c3b34056fed8ae05efb44e55f73b31adde44
+              rootfs_sha=4fd59b607fd17fd711835ffb95e8d14fc49c64bdf5e57d4ca6051dd9b2aa5091 ;;
+            *) echo "no guest for $arch"; exit 1 ;;
+          esac
+          target="$arch-unknown-linux-musl"
+          {
+            echo "ARCH=$arch"
+            echo "TARGET=$target"
+            echo "QEMU_PACKAGE=$qemu"
+            echo "KERNEL_SHA=$kernel_sha"
+            echo "ROOTFS_SHA=$rootfs_sha"
+            echo "CC_$(echo "$target" | tr - _)=musl-gcc"
+          } >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: x86_64-unknown-linux-musl
+          targets: ${{ env.TARGET }}
       - uses: Swatinem/rust-cache@v2
-      - run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends qemu-system-x86 musl-tools e2fsprogs
-      - run: cargo build --release --target x86_64-unknown-linux-musl -p baste
+      - run: sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends "$QEMU_PACKAGE" musl-tools e2fsprogs
+      - run: cargo build --release --target "$TARGET" -p baste
       - name: Download the pinned kernel and rootfs
         run: |
-          base=https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.13/x86_64
+          base="https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.13/$ARCH"
           curl -fsSLo vmlinux "$base/vmlinux-6.1.141"
           curl -fsSLo rootfs.squashfs "$base/ubuntu-24.04.squashfs"
-          sha256sum -c <<'SUMS'
-          b36a4a1b10f33b9cfdcde3d1a787d9c090556a3edb211cd06d1f3f9a6c7e8724  vmlinux
-          2332f3bb101fc8645c6322c7445acd353a51845a33e66b58c711905d685b2aa7  rootfs.squashfs
-          SUMS
-      - run: scripts/qemu-smoke.sh target/x86_64-unknown-linux-musl/release/baste vmlinux rootfs.squashfs
+          printf '%s  vmlinux\n%s  rootfs.squashfs\n' "$KERNEL_SHA" "$ROOTFS_SHA" | sha256sum -c
+      - run: scripts/qemu-smoke.sh "target/$TARGET/release/baste" vmlinux rootfs.squashfs
 
   firecracker:
     name: Firecracker end to end (KVM)
