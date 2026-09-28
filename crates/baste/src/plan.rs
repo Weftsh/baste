@@ -4,7 +4,7 @@
 use crate::git::Git;
 use crate::github::GitHub;
 use crate::store::{JobRecord, JobState, PullRequestInfo, Run, Store};
-use anyhow::Result;
+use anyhow::{bail, Result};
 use baste_workflow::{depends_on_needs, expand_job, Job, JobInstance, Placement, Workflow};
 use serde_json::{json, Map, Value};
 
@@ -111,6 +111,12 @@ pub fn plan(
                 f == w || f.ends_with(&format!("/{w}")) || f.ends_with(&format!("/{w}.yml"))
             })
         });
+    }
+    if files.is_empty() && !run.only_workflows.is_empty() {
+        bail!(
+            "no workflow in {WORKFLOW_DIR} matches --workflow {}",
+            run.only_workflows.join(", ")
+        );
     }
     if files.is_empty() {
         run.notes.push(format!(
@@ -276,6 +282,28 @@ pub fn plan(
     for pw in &planned {
         add_job_records(run, pw)?;
     }
+    if !run.only_jobs.is_empty() && run.jobs.is_empty() {
+        let mut known: Vec<String> = planned
+            .iter()
+            .flat_map(|pw| pw.workflow.jobs.iter())
+            .map(|j| match &j.name {
+                Some(name) if name != &j.id && !name.contains("${{") => {
+                    format!("{} ({name})", j.id)
+                }
+                _ => j.id.clone(),
+            })
+            .collect();
+        known.dedup();
+        bail!(
+            "no job matches --job {}. Jobs that run for this commit: {}",
+            run.only_jobs.join(", "),
+            if known.is_empty() {
+                "none".to_string()
+            } else {
+                known.join(", ")
+            }
+        );
+    }
     if let Some(p) = planned.iter().find(|p| p.event == "pull_request") {
         run.checkout_sha = p.checkout_sha.clone();
     }
@@ -369,10 +397,15 @@ fn wanted_jobs(wf: &Workflow, only: &[String]) -> Vec<String> {
         return wf.jobs.iter().map(|j| j.id.clone()).collect();
     }
     let mut out: Vec<String> = Vec::new();
-    let mut todo: Vec<String> = only
+    // A job's id, or the name GitHub and `baste status` show for it.
+    let mut todo: Vec<String> = wf
+        .jobs
         .iter()
-        .filter(|j| wf.job(j).is_some())
-        .cloned()
+        .filter(|j| {
+            only.iter()
+                .any(|o| o == &j.id || j.name.as_deref().is_some_and(|n| n.eq_ignore_ascii_case(o)))
+        })
+        .map(|j| j.id.clone())
         .collect();
     while let Some(id) = todo.pop() {
         if out.contains(&id) {

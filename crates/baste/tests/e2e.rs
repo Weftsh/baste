@@ -628,3 +628,41 @@ jobs:
         "the gate waited"
     );
 }
+
+#[test]
+fn job_filter_by_name_and_no_match_is_an_error() {
+    let env = TestEnv::new();
+    env.write(
+        ".github/workflows/ci.yml",
+        r#"
+name: CI
+on: push
+jobs:
+  vm-smoke:
+    name: VM guest (QEMU)
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "smoke ran"
+  other:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "other ran"
+"#,
+    );
+    env.commit("jobs");
+    // The name GitHub shows works like the id.
+    let out = env.baste(&["run", "--no-status", "--job", "VM guest (QEMU)"]);
+    let text = stdout(&out);
+    assert!(out.status.success(), "{text}\n{}", stderr(&out));
+    assert!(
+        text.contains("smoke ran") && !text.contains("other ran"),
+        "{text}"
+    );
+    // A filter that matches nothing fails and says what exists, rather than
+    // reporting an empty run as passed.
+    let out = env.baste(&["run", "--no-status", "--job", "nope"]);
+    let all = format!("{}{}", stdout(&out), stderr(&out));
+    assert!(!out.status.success(), "{all}");
+    assert!(all.contains("no job matches --job nope"), "{all}");
+    assert!(all.contains("vm-smoke (VM guest (QEMU))"), "{all}");
+}

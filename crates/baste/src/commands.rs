@@ -476,6 +476,9 @@ pub fn follow_run(store: &Store, run_id: &str, job: Option<&str>) -> Result<bool
                     red("The worker stopped unexpectedly; see worker.log in the run directory.")
                 );
             }
+            if let Some(e) = &run.error {
+                println!("{} {e}", red("error:"));
+            }
             println!();
             print_footer(&run);
             return Ok(run.state == RunState::Passed);
