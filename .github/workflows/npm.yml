@@ -95,13 +95,34 @@ jobs:
           # Pre-releases (v0.2.0-rc.1) go to the "next" dist-tag, not "latest".
           dist_tag=latest
           case "$TAG" in *-*) dist_tag=next ;; esac
+          # Whether npm can serve name@version yet (the registry, no auth).
+          available() {
+            curl -fsS -o /dev/null "https://registry.npmjs.org/${1/\//%2f}/$2" 2>/dev/null
+          }
+          publish() {
+            local name version
+            name=$(node -p "require('./$1/package.json').name")
+            version=$(node -p "require('./$1/package.json').version")
+            if available "$name" "$version"; then
+              echo "$name@$version is already on npm"
+              return
+            fi
+            (cd "$1" && npm publish --provenance --access public --tag "$dist_tag")
+          }
+          # order.txt lists the platform packages, then the launcher.
+          launcher=$(tail -n 1 order.txt)
+          while read -r dir; do publish "$dir"; done < <(head -n -1 order.txt)
+          # npm takes a few minutes to process a new version before it can be
+          # installed. Publish the launcher only once every platform package
+          # it depends on installs, so nobody gets the launcher on its own.
           while read -r dir; do
             name=$(node -p "require('./$dir/package.json').name")
             version=$(node -p "require('./$dir/package.json').version")
-            # Ask the registry directly (no auth) whether this version exists.
-            if curl -fsS -o /dev/null "https://registry.npmjs.org/${name/\//%2f}/$version"; then
-              echo "$name@$version is already on npm"
-              continue
-            fi
-            (cd "$dir" && npm publish --provenance --access public --tag "$dist_tag")
-          done < order.txt
+            for attempt in $(seq 1 60); do
+              available "$name" "$version" && break
+              [ "$attempt" = 60 ] && { echo "$name@$version still isn't available after 15 minutes"; exit 1; }
+              sleep 15
+            done
+            echo "$name@$version is available"
+          done < <(head -n -1 order.txt)
+          publish "$launcher"
