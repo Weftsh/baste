@@ -44,7 +44,7 @@ boot() { # name mode args...
     -nodefaults -no-user-config -nographic -no-reboot \
     -serial "file:$W/$name-console.log" \
     -kernel "$KERNEL" -initrd "$W/initramfs.cpio" \
-    -append "console=ttyS0 reboot=k panic=1 tsc_early_khz=2000000 ip=10.0.2.15::10.0.2.2:255.255.255.0::eth0:off baste.mode=$mode baste.events=/dev/hvc0 baste.dns=10.0.2.3 $BOOT_ARGS" \
+    -append "console=ttyS0 earlyprintk=serial,ttyS0 reboot=k panic=1 tsc_early_khz=2000000 ip=10.0.2.15::10.0.2.2:255.255.255.0::eth0:off baste.mode=$mode baste.events=/dev/hvc0 baste.dns=10.0.2.3 $BOOT_ARGS" \
     "$@" \
     -netdev user,id=n0 -device virtio-net-device,netdev=n0 \
     -device virtio-serial-device -chardev "file,id=ev,path=$W/$name-events.log" -device virtconsole,chardev=ev
@@ -58,6 +58,11 @@ boot() { # name mode args...
   if [ "$status" -ne 0 ]; then
     echo "QEMU exited with $status" >&2
     exit 1
+  fi
+  # With -no-reboot, a guest that resets (a kernel fault or panic) ends QEMU
+  # with status 0. Say so, since the console may show nothing after the BIOS.
+  if ! grep -q "Linux version" "$W/$name-console.log"; then
+    echo "The guest reset before the kernel started (QEMU exited with status 0)" >&2
   fi
   grep -q '"type":"job_finished","result":"success"' "$W/$name-events.log" || { echo "$name did not succeed" >&2; exit 1; }
 }
