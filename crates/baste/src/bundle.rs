@@ -23,6 +23,8 @@ pub struct ActionCache {
     dir: PathBuf,
     api: Option<GitHub>,
     resolved: Mutex<HashMap<String, PathBuf>>,
+    /// Held while downloading, so jobs starting together fetch an action once.
+    downloading: Mutex<()>,
 }
 
 impl ActionCache {
@@ -31,6 +33,7 @@ impl ActionCache {
             dir: crate::config::cache_dir().join("actions"),
             api,
             resolved: Mutex::new(HashMap::new()),
+            downloading: Mutex::new(()),
         }
     }
 
@@ -78,7 +81,8 @@ impl ActionCache {
             }
         };
         let dir = base.join(&sha);
-        if !dir.is_dir() {
+        let _one_at_a_time = self.downloading.lock().unwrap();
+        if !dir.join(crate::github::COMPLETE_MARKER).exists() {
             log(&format!(
                 "Downloading action {owner}/{repo}@{git_ref} ({})",
                 &sha[..12]

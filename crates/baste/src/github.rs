@@ -341,11 +341,40 @@ impl GitHub {
     }
 }
 
-/// Unpack a GitHub tarball, dropping the first path component.
+/// Marks a fully unpacked directory: one without it is incomplete.
+pub const COMPLETE_MARKER: &str = ".baste-complete";
+
+/// Unpack a GitHub tarball into `dest`, dropping the first path component.
+///
+/// It unpacks into a directory of its own and moves that into place, so
+/// concurrent calls (jobs starting together need the same action) never see
+/// or disturb each other's partial work. If `dest` is complete by then, the
+/// copy already there wins.
 pub fn unpack_tarball(reader: impl Read, dest: &Path) -> Result<()> {
-    let tmp = dest.with_extension("partial");
-    let _ = std::fs::remove_dir_all(&tmp);
+    let name = dest.file_name().unwrap_or_default().to_string_lossy();
+    let tmp = dest.with_file_name(format!(
+        "{name}.partial-{}-{:x}",
+        std::process::id(),
+        rand::random::<u64>()
+    ));
     std::fs::create_dir_all(&tmp)?;
+    let result = unpack_into(reader, &tmp).and_then(|()| {
+        std::fs::write(tmp.join(COMPLETE_MARKER), "")?;
+        if dest.join(COMPLETE_MARKER).exists() {
+            return Ok(());
+        }
+        // An incomplete copy from an older Baste: replace it.
+        let _ = std::fs::remove_dir_all(dest);
+        match std::fs::rename(&tmp, dest) {
+            Err(_) if dest.join(COMPLETE_MARKER).exists() => Ok(()),
+            other => other.map_err(Into::into),
+        }
+    });
+    let _ = std::fs::remove_dir_all(&tmp);
+    result
+}
+
+fn unpack_into(reader: impl Read, tmp: &Path) -> Result<()> {
     let mut archive = tar::Archive::new(flate2::read::GzDecoder::new(reader));
     for entry in archive.entries()? {
         let mut entry = entry?;
@@ -366,8 +395,6 @@ pub fn unpack_tarball(reader: impl Read, dest: &Path) -> Result<()> {
         }
         entry.unpack(&out)?;
     }
-    let _ = std::fs::remove_dir_all(dest);
-    std::fs::rename(&tmp, dest)?;
     Ok(())
 }
 
@@ -403,6 +430,62 @@ pub fn is_missing_commit(e: &anyhow::Error) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A tarball shaped like GitHub's: everything under one top-level folder.
+    fn tarball(files: &[(&str, &str)]) -> Vec<u8> {
+        let mut builder = tar::Builder::new(flate2::write::GzEncoder::new(
+            Vec::new(),
+            flate2::Compression::fast(),
+        ));
+        for (path, body) in files {
+            let mut header = tar::Header::new_gnu();
+            header.set_size(body.len() as u64);
+            header.set_mode(0o644);
+            header.set_cksum();
+            builder
+                .append_data(
+                    &mut header,
+                    format!("owner-repo-abc123/{path}"),
+                    body.as_bytes(),
+                )
+                .unwrap();
+        }
+        builder.into_inner().unwrap().finish().unwrap()
+    }
+
+    #[test]
+    fn concurrent_unpacks_leave_one_complete_copy() {
+        // Jobs that start together download the same action at once.
+        let names: Vec<String> = (0..200).map(|i| format!("src/file{i}.txt")).collect();
+        let mut files: Vec<(&str, &str)> = names.iter().map(|n| (n.as_str(), "x")).collect();
+        files.push(("action.yml", "runs: {using: node20, main: dist/index.js}"));
+        let data = tarball(&files);
+        let tmp = tempfile::tempdir().unwrap();
+        let dest = tmp.path().join("abc123");
+        std::thread::scope(|s| {
+            for _ in 0..8 {
+                s.spawn(|| unpack_tarball(data.as_slice(), &dest).unwrap());
+            }
+        });
+        assert!(dest.join(COMPLETE_MARKER).exists());
+        assert!(dest.join("action.yml").exists());
+        for n in &names {
+            assert!(dest.join(n).exists(), "{n} is missing");
+        }
+        // No temporary directories are left behind.
+        let leftovers: Vec<_> = std::fs::read_dir(tmp.path()).unwrap().collect();
+        assert_eq!(leftovers.len(), 1);
+    }
+
+    #[test]
+    fn an_incomplete_copy_is_replaced() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dest = tmp.path().join("abc123");
+        std::fs::create_dir_all(dest.join("src")).unwrap();
+        unpack_tarball(tarball(&[("action.yml", "x")]).as_slice(), &dest).unwrap();
+        assert!(dest.join("action.yml").exists());
+        assert!(dest.join(COMPLETE_MARKER).exists());
+    }
 
     #[test]
     fn truncates_descriptions() {
