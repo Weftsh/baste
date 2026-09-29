@@ -137,6 +137,9 @@ pub fn work(store: Store, git: Git, run_id: &str) -> Result<()> {
     result
 }
 
+/// Written into a run's directory by the newer run that cancels it.
+const SUPERSEDED_BY: &str = "superseded-by";
+
 struct Shared {
     store: Store,
     git: Git,
@@ -183,6 +186,17 @@ impl SaveState {
 impl Shared {
     fn run_id(&self) -> String {
         self.run.lock().unwrap().id.clone()
+    }
+
+    /// Why the run was cancelled: a newer push to its branch, or a request.
+    fn cancel_reason(&self) -> String {
+        match std::fs::read_to_string(self.store.run_dir(&self.run_id()).join(SUPERSEDED_BY)) {
+            Ok(newer) => format!(
+                "superseded by run {}, a newer push to this branch",
+                newer.trim()
+            ),
+            Err(_) => "the run was cancelled".into(),
+        }
     }
 
     fn save(&self) {
@@ -248,12 +262,11 @@ impl Shared {
             JobState::Cancelled => (
                 "error",
                 format!(
-                    "Cancelled{} · baste logs {id}",
+                    "Cancelled: {} · baste logs {id}",
                     record
                         .reason
-                        .as_deref()
-                        .map(|r| format!(": {r}"))
-                        .unwrap_or_default()
+                        .clone()
+                        .unwrap_or_else(|| self.cancel_reason())
                 ),
             ),
             JobState::Skipped => (
@@ -400,6 +413,11 @@ impl Worker {
                 && other.worker_alive()
             {
                 if let Some(pid) = other.worker_pid {
+                    // Tell the older run why it's being stopped.
+                    let _ = std::fs::write(
+                        self.shared.store.run_dir(&other.id).join(SUPERSEDED_BY),
+                        &run.id,
+                    );
                     // SAFETY: plain syscall.
                     unsafe { libc::kill(pid as i32, libc::SIGTERM) };
                     self.shared.run.lock().unwrap().notes.push(format!(
@@ -522,7 +540,7 @@ impl Worker {
                     flag.store(true, Ordering::SeqCst);
                 }
                 ready.clear();
-                self.cancel_queued("the run was cancelled", None);
+                self.cancel_queued(&self.shared.cancel_reason(), None);
             }
 
             // Release jobs whose needs are done.

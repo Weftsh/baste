@@ -155,8 +155,8 @@ pub fn print_insights(runs: &[Run]) {
         .filter(|r| r.state == RunState::Passed)
         .count();
     println!(
-        "{} over the last {} runs: {} passed, {} failed",
-        bold("Runs"),
+        "{} {} runs: {} passed, {} failed",
+        bold("Last"),
         finished.len(),
         passed,
         finished.len() - passed

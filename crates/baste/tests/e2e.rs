@@ -801,3 +801,58 @@ jobs:
     assert!(text.contains("restored: built for v1"), "{text}");
     assert!(text.contains("Cache saved with key: deps-"), "{text}");
 }
+
+#[test]
+fn a_newer_push_cancels_the_older_run_and_says_why() {
+    let env = TestEnv::new();
+    env.write(
+        ".github/workflows/ci.yml",
+        r#"
+name: CI
+on: push
+jobs:
+  slow:
+    runs-on: ubuntu-latest
+    steps:
+      - run: sleep 30
+"#,
+    );
+    let first = env.commit("first");
+    let out = env.baste(&["init", "--backend", "host"]);
+    assert!(out.status.success(), "{}{}", stdout(&out), stderr(&out));
+    let push = |env: &TestEnv| {
+        let out = env
+            .command("git")
+            .args(["push", "-q", "origin", "main"])
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "{}", stderr(&out));
+    };
+    push(&env);
+    // Let the first run start its job.
+    let start = Instant::now();
+    while !env.github.latest(&first).contains_key("baste/CI/slow") {
+        assert!(
+            start.elapsed() < Duration::from_secs(20),
+            "no status for the first push"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    env.write("more.txt", "x\n");
+    env.commit("second");
+    push(&env);
+    let runs = env.runs();
+    let newer = runs[0]["id"].as_str().unwrap().to_string();
+    let older = runs[1]["id"].as_str().unwrap().to_string();
+    let run = env.wait(&older, Duration::from_secs(30));
+    assert_eq!(run["state"], "cancelled");
+    let st = &env.github.latest(&first)["baste/CI/slow"];
+    assert_eq!(st.state, "error");
+    assert!(
+        st.description
+            .contains(&format!("superseded by run {newer}, a newer push")),
+        "{}",
+        st.description
+    );
+    let _ = env.baste(&["cancel", &newer]);
+}
