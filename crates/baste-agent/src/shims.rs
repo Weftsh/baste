@@ -21,7 +21,7 @@ const ARTIFACT_CHUNK: usize = 512 * 1024;
 pub(crate) fn is_shimmed(job: &Job, uses: &Uses) -> bool {
     matches!(
         uses.repository().as_deref(),
-        Some("actions/upload-artifact" | "actions/download-artifact")
+        Some("actions/upload-artifact" | "actions/download-artifact" | "actions/cache")
     ) || (uses.repository().as_deref() == Some("actions/checkout")
         && job.spec.checkout.packs.iter().any(|_| true))
 }
@@ -42,6 +42,20 @@ pub(crate) fn try_shim(
         }
     };
     match repo.as_str() {
+        "actions/cache" => {
+            let path = match uses {
+                Uses::Remote { path, .. } => path.as_deref(),
+                _ => None,
+            };
+            if !matches!(path, None | Some("restore" | "save")) {
+                return None;
+            }
+            let name = step
+                .name
+                .clone()
+                .unwrap_or_else(|| format!("Run {}", step.uses.clone().unwrap_or_default()));
+            Some(crate::cache::run(job, path, &inputs, scope, &name))
+        }
         "actions/checkout" => checkout(job, &inputs, scope),
         "actions/upload-artifact" => Some(upload_artifact(job, &inputs, scope)),
         "actions/download-artifact" => Some(download_artifact(job, &inputs, scope)),
@@ -406,6 +420,7 @@ fn hidden(rel: &Path) -> bool {
 /// stored relative to (the least common ancestor of the search paths).
 fn collect_artifact_files(
     workspace: &Path,
+    home: &Path,
     spec: &str,
     include_hidden: bool,
 ) -> Result<(PathBuf, Vec<PathBuf>), String> {
@@ -417,7 +432,7 @@ fn collect_artifact_files(
             None => (false, line),
         };
         let pat = if let Some(rest) = pat.strip_prefix("~/") {
-            format!("{}/{rest}", std::env::var("HOME").unwrap_or_default())
+            format!("{}/{rest}", home.display())
         } else {
             pat.to_string()
         };
@@ -510,6 +525,7 @@ fn upload_artifact(job: &mut Job, inputs: &Map<String, Value>, scope: &Scope) ->
     }
     let (root, files) = match collect_artifact_files(
         &job.dirs.workspace,
+        &job.step_home(),
         &path,
         flag(inputs, "include-hidden-files", false),
     ) {
@@ -700,18 +716,19 @@ mod tests {
         std::fs::write(w.join("dist/.cache/x"), "x").unwrap();
         std::fs::write(w.join("report.xml"), "r").unwrap();
 
-        let (root, files) = collect_artifact_files(w, "dist", false).unwrap();
+        let (root, files) = collect_artifact_files(w, w, "dist", false).unwrap();
         assert_eq!(root, w.join("dist"));
         assert_eq!(files.len(), 3);
 
-        let (_, files) = collect_artifact_files(w, "dist\n!dist/**/*.map", false).unwrap();
+        let (_, files) = collect_artifact_files(w, w, "dist\n!dist/**/*.map", false).unwrap();
         assert_eq!(files.len(), 2);
 
-        let (root, files) = collect_artifact_files(w, "dist/**/*.js\nreport.xml", false).unwrap();
+        let (root, files) =
+            collect_artifact_files(w, w, "dist/**/*.js\nreport.xml", false).unwrap();
         assert_eq!(root, w.to_path_buf());
         assert_eq!(files.len(), 2);
 
-        let (_, files) = collect_artifact_files(w, "dist", true).unwrap();
+        let (_, files) = collect_artifact_files(w, w, "dist", true).unwrap();
         assert_eq!(files.len(), 4);
     }
 

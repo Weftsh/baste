@@ -68,6 +68,7 @@ fn fixture(steps: &str) -> Fixture {
             server_url: "https://github.com".into(),
         },
         artifacts: vec![],
+        caches: vec![],
         event_file: "event.json".into(),
         runner: RunnerInfo {
             os: "Linux".into(),
@@ -698,4 +699,23 @@ fn cancellation_stops_the_job() {
     let log = r.log();
     assert!(!log.contains("SHOULD-NOT-RUN"), "{log}");
     assert!(log.contains("cleanup-ran"), "{log}");
+}
+
+#[test]
+fn steps_know_they_run_locally() {
+    let f = fixture(
+        r#"
+- run: echo "process=$BASTE"
+- if: env.BASTE == 'true'
+  run: echo "local-only step ran"
+- if: env.BASTE != 'true'
+  run: echo "github-only step ran"
+"#,
+    );
+    let r = run(&f);
+    let log = r.log();
+    assert_eq!(r.outcome, Outcome::Success, "{log}");
+    assert!(log.contains("process=true"), "{log}");
+    assert!(log.contains("local-only step ran"), "{log}");
+    assert!(!log.contains("github-only step ran"), "{log}");
 }

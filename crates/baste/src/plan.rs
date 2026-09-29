@@ -282,6 +282,14 @@ pub fn plan(
     for pw in &planned {
         add_job_records(run, pw)?;
     }
+    if !run.only_workflows.is_empty() && run.only_jobs.is_empty() && run.jobs.is_empty() {
+        let event = run.event_override.clone().unwrap_or_else(|| "push".into());
+        bail!(
+            "--workflow {} has no jobs to run for a {event} to {}: check the workflow's `on:` triggers",
+            run.only_workflows.join(", "),
+            run.git_ref
+        );
+    }
     if !run.only_jobs.is_empty() && run.jobs.is_empty() {
         let mut known: Vec<String> = planned
             .iter()

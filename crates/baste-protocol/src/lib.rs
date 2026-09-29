@@ -63,6 +63,9 @@ pub struct JobSpec {
     /// Artifacts uploaded by jobs this job needs, available to download-artifact.
     #[serde(default)]
     pub artifacts: Vec<ArtifactSource>,
+    /// Saved caches this job may restore with `actions/cache`, newest first.
+    #[serde(default)]
+    pub caches: Vec<CacheSource>,
     /// Path of the event payload inside the bundle.
     pub event_file: String,
     pub runner: RunnerInfo,
@@ -124,6 +127,16 @@ pub struct CheckoutPack {
 pub struct ArtifactSource {
     pub name: String,
     /// Tar file in the bundle.
+    pub file: String,
+}
+
+/// A saved `actions/cache` entry in the bundle.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct CacheSource {
+    pub key: String,
+    /// Digest of the cached paths: an entry only restores for the same paths.
+    pub version: String,
+    /// Gzipped tar in the bundle.
     pub file: String,
 }
 
@@ -236,6 +249,17 @@ pub enum Event {
     ArtifactEnd {
         name: String,
         files: u64,
+        bytes: u64,
+    },
+    /// A chunk of a cache being saved (a gzipped tar, base64 encoded).
+    CacheChunk {
+        key: String,
+        version: String,
+        data: String,
+    },
+    CacheEnd {
+        key: String,
+        version: String,
         bytes: u64,
     },
     /// Content a step appended to `GITHUB_STEP_SUMMARY`.

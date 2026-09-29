@@ -9,8 +9,8 @@ use crate::secrets::Secrets;
 use crate::store::JobRecord;
 use anyhow::{anyhow, Context, Result};
 use baste_protocol::{
-    ActionSource, ArtifactSource, CheckoutPack, CheckoutSource, JobSpec, RunDefaults, RunnerInfo,
-    PROTOCOL_VERSION,
+    ActionSource, ArtifactSource, CacheSource, CheckoutPack, CheckoutSource, JobSpec, RunDefaults,
+    RunnerInfo, PROTOCOL_VERSION,
 };
 use baste_workflow::{scalar_string, ActionMeta, Job, Uses};
 use serde_json::{json, Map, Value};
@@ -167,6 +167,14 @@ pub fn collect_actions(
                 path,
                 git_ref,
             } => {
+                // The agent always handles actions/cache itself (Baste's own
+                // cache store), so it needs no download.
+                if owner.eq_ignore_ascii_case("actions")
+                    && repo.eq_ignore_ascii_case("cache")
+                    && matches!(path.as_deref(), None | Some("restore" | "save"))
+                {
+                    continue;
+                }
                 let key = parsed.repo_ref().unwrap().to_ascii_lowercase();
                 if !seen.insert(format!("{key}/{}", path.clone().unwrap_or_default())) {
                     continue;
@@ -369,6 +377,8 @@ pub struct BundleInput<'a> {
     pub actions: Vec<(String, String, String, PathBuf)>,
     pub packs: Vec<(u32, PathBuf, Vec<String>)>,
     pub artifacts: Vec<(String, PathBuf)>,
+    /// Saved `actions/cache` entries the job may restore, newest first.
+    pub caches: Vec<(crate::actions_cache::Entry, PathBuf)>,
     pub repository: String,
     pub server_url: String,
 }
@@ -405,6 +415,16 @@ pub fn write_bundle(dir: &Path, input: BundleInput) -> Result<JobSpec> {
         link_or_copy(path, &dir.join(&rel))?;
         artifacts.push(ArtifactSource {
             name: name.clone(),
+            file: rel,
+        });
+    }
+    let mut caches = Vec::new();
+    for (i, (entry, path)) in input.caches.iter().enumerate() {
+        let rel = format!("caches/{i}.tgz");
+        link_or_copy(path, &dir.join(&rel))?;
+        caches.push(CacheSource {
+            key: entry.key.clone(),
+            version: entry.version.clone(),
             file: rel,
         });
     }
@@ -480,6 +500,7 @@ pub fn write_bundle(dir: &Path, input: BundleInput) -> Result<JobSpec> {
             server_url: input.server_url,
         },
         artifacts,
+        caches,
         event_file: "event.json".into(),
         runner: input.runner,
     };

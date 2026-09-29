@@ -141,6 +141,7 @@ dependencies = [
  "baste-expr",
  "baste-protocol",
  "baste-workflow",
+ "flate2",
  "globset",
  "hex",
  "libc",

@@ -1,6 +1,7 @@
 //! Baste: run your GitHub Actions workflows locally in a pinned VM on push,
 //! and report the result to GitHub as commit statuses.
 
+mod actions_cache;
 mod backend;
 mod bundle;
 mod commands;

@@ -547,6 +547,12 @@ pub(crate) fn run_post(job: &mut Job, post: PostStep, index: usize) -> StepResul
             }
             run_container(job, index, &image, Some(&entrypoint), &[], env, timeout)
         }
+        PostKind::CacheSave {
+            key,
+            version,
+            paths,
+            exact_hit,
+        } => return crate::cache::post_save(job, index, &key, &version, &paths, exact_hit),
     };
     finish(job, index, r, timeout).0
 }

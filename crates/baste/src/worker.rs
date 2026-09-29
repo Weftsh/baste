@@ -1,6 +1,7 @@
 //! The background worker that owns one run: plan it, post statuses, run each
 //! local job in a fresh VM in dependency order, and record everything.
 
+use crate::actions_cache::CacheStore;
 use crate::backend::{self, Backend, JobLaunch};
 use crate::bundle::{self, ActionCache, BundleInput, PackCache};
 use crate::config::Config;
@@ -993,6 +994,8 @@ struct JobRecorder<'a> {
     job_dir: PathBuf,
     logs: HashMap<usize, std::fs::File>,
     artifacts: HashMap<String, std::fs::File>,
+    /// Caches being received, by (key, version): the file and its path.
+    caches: HashMap<(String, String), (std::fs::File, PathBuf)>,
     finished: Option<(Outcome, Map<String, Value>, Option<String>)>,
 }
 
@@ -1004,6 +1007,7 @@ impl<'a> JobRecorder<'a> {
             job_dir,
             logs: HashMap::new(),
             artifacts: HashMap::new(),
+            caches: HashMap::new(),
             finished: None,
         }
     }
@@ -1136,6 +1140,40 @@ impl<'a> JobRecorder<'a> {
                 );
                 let _ = std::fs::write(dir.join(format!("{slug}.name")), &name);
                 self.shared.with_job(&self.key, |j| j.artifacts.push(name));
+            }
+            Event::CacheChunk { key, version, data } => {
+                let slot = match self.caches.entry((key, version)) {
+                    std::collections::hash_map::Entry::Occupied(o) => Some(o.into_mut()),
+                    std::collections::hash_map::Entry::Vacant(v) => {
+                        let repo = self.shared.run.lock().unwrap().repo.clone();
+                        CacheStore::for_repo(&repo)
+                            .partial_path()
+                            .ok()
+                            .and_then(|p| std::fs::File::create(&p).ok().map(|f| (f, p)))
+                            .map(|fp| v.insert(fp))
+                    }
+                };
+                if let (Some((file, _)), Ok(bytes)) =
+                    (slot, base64::engine::general_purpose::STANDARD.decode(data))
+                {
+                    let _ = file.write_all(&bytes);
+                }
+            }
+            Event::CacheEnd { key, version, .. } => {
+                if let Some((file, path)) = self.caches.remove(&(key.clone(), version.clone())) {
+                    drop(file);
+                    let (repo, git_ref) = {
+                        let run = self.shared.run.lock().unwrap();
+                        (run.repo.clone(), run.git_ref.clone())
+                    };
+                    match CacheStore::for_repo(&repo).commit(&key, &version, &git_ref, &path) {
+                        Ok(true) => {}
+                        Ok(false) => eprintln!(
+                            "cache {key} already exists for {git_ref}; kept the existing one"
+                        ),
+                        Err(e) => eprintln!("saving cache {key}: {e:#}"),
+                    }
+                }
             }
             Event::Summary { markdown, .. } => {
                 if let Ok(mut f) = std::fs::OpenOptions::new()
@@ -1302,6 +1340,16 @@ fn prepare_and_run(
         (run.repo.full_name(), run.repo.server_url())
     };
 
+    let caches = if crate::actions_cache::job_uses_cache(&job.steps) {
+        let (repo, git_ref) = {
+            let run = shared.run.lock().unwrap();
+            (run.repo.clone(), run.git_ref.clone())
+        };
+        CacheStore::for_repo(&repo)
+            .candidates(&crate::actions_cache::scope_refs(&git_ref, &pw.github))
+    } else {
+        vec![]
+    };
     let mut log = |l: &str| rec.host_log(l);
     let actions = bundle::collect_actions(
         job,
@@ -1346,6 +1394,7 @@ fn prepare_and_run(
             actions,
             packs,
             artifacts: run_artifacts(shared),
+            caches,
             repository,
             server_url,
         },

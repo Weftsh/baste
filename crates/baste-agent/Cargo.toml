@@ -23,6 +23,7 @@ tar.workspace = true
 globset = "0.4"
 walkdir = "2"
 base64 = "0.22"
+flate2 = "1"
 
 [dev-dependencies]
 tempfile.workspace = true

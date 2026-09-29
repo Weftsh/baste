@@ -3,6 +3,7 @@
 //! development, directly on the host).
 
 mod actions;
+mod cache;
 pub mod commands;
 mod hashfiles;
 mod job;

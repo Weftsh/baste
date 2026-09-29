@@ -718,3 +718,86 @@ jobs:
     );
     env.wait(&id, Duration::from_secs(60));
 }
+
+#[test]
+fn actions_cache_saves_and_restores_across_runs() {
+    let env = TestEnv::new();
+    env.write(
+        ".github/workflows/ci.yml",
+        r#"
+name: CI
+on: push
+jobs:
+  cached:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: deps
+          key: deps-${{ hashFiles('lock.txt') }}
+          restore-keys: deps-
+      - run: |
+          echo "hit=[${{ steps.cache.outputs.cache-hit }}]"
+          if [ -f deps/built.txt ]; then
+            echo "restored: $(cat deps/built.txt)"
+          else
+            mkdir -p deps && echo "built for $(cat lock.txt)" > deps/built.txt
+          fi
+      - id: only-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: extra
+          key: extra-1
+      - run: |
+          echo "extra-hit=[${{ steps.only-restore.outputs.cache-hit }}] matched=[${{ steps.only-restore.outputs.cache-matched-key }}]"
+          mkdir -p extra && echo e > extra/e.txt
+      - uses: actions/cache/save@v4
+        with:
+          path: extra
+          key: extra-1
+"#,
+    );
+    env.write("lock.txt", "v1\n");
+    env.commit("cache");
+
+    // First run: nothing cached yet, so it builds and saves.
+    let out = env.baste(&["run", "--no-status"]);
+    let text = stdout(&out);
+    assert!(out.status.success(), "{text}\n{}", stderr(&out));
+    assert!(
+        text.contains("Cache not found for input keys: deps-"),
+        "{text}"
+    );
+    assert!(text.contains("hit=[]"), "{text}");
+    assert!(text.contains("Cache saved with key: deps-"), "{text}");
+    assert!(text.contains("extra-hit=[] matched=[]"), "{text}");
+    assert!(text.contains("Cache saved with key: extra-1"), "{text}");
+
+    // Same commit: an exact hit, and no second save.
+    let out = env.baste(&["run", "--no-status"]);
+    let text = stdout(&out);
+    assert!(out.status.success(), "{text}\n{}", stderr(&out));
+    assert!(text.contains("hit=[true]"), "{text}");
+    assert!(text.contains("restored: built for v1"), "{text}");
+    assert!(
+        text.contains("Cache hit occurred on the primary key deps-"),
+        "{text}"
+    );
+    assert!(
+        text.contains("extra-hit=[true] matched=[extra-1]"),
+        "{text}"
+    );
+
+    // A new lockfile: no exact entry, so the restore key brings back the
+    // older one, and the new key is saved.
+    env.write("lock.txt", "v2\n");
+    env.commit("new lock");
+    let out = env.baste(&["run", "--no-status"]);
+    let text = stdout(&out);
+    assert!(out.status.success(), "{text}\n{}", stderr(&out));
+    assert!(text.contains("hit=[false]"), "{text}");
+    assert!(text.contains("restored: built for v1"), "{text}");
+    assert!(text.contains("Cache saved with key: deps-"), "{text}");
+}

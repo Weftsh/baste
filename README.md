@@ -182,7 +182,7 @@ A job that references a secret you haven't set fails before any step runs, with 
 | `needs:` ordering and outputs, matrices with include/exclude, fail-fast, max-parallel | |
 | `env`, `defaults`, expressions and `if:` (status functions, `hashFiles`, `fromJSON`, ...) | |
 | `GITHUB_ENV`, `GITHUB_OUTPUT`, `GITHUB_PATH`, step summaries, workflow commands, masking | |
-| `actions/checkout` (from the pushed commit, with any fetch depth), `upload-artifact` and `download-artifact` between jobs | |
+| `actions/checkout` (from the pushed commit, with any fetch depth), `upload-artifact` and `download-artifact` between jobs, `actions/cache` with a cache on your machine | |
 
 `pull_request` workflows run on the same test merge commit GitHub would create, when the branch has an open PR. See [docs/compatibility.md](docs/compatibility.md) for details.
 
@@ -252,7 +252,6 @@ Releases are one click: **Actions → Release → Run workflow**, then pick patc
 ## Roadmap
 
 - Service containers (`services:`) inside the VM, so jobs that need Postgres or Redis run locally too
-- `actions/cache` backed by a local cache
 - A GitHub App with signed attestation of each run, for teams that need more than trust-based checks
 
 ## License

@@ -125,6 +125,15 @@ pub(crate) struct StepResult {
 }
 
 impl StepResult {
+    pub fn succeeded(outputs: Map<String, Value>) -> StepResult {
+        StepResult {
+            outcome: Outcome::Success,
+            conclusion: Outcome::Success,
+            exit_code: Some(0),
+            outputs,
+        }
+    }
+
     pub fn failed(exit_code: Option<i32>) -> StepResult {
         StepResult {
             outcome: Outcome::Failure,
@@ -197,6 +206,13 @@ pub(crate) enum PostKind {
         entrypoint: String,
         env: BTreeMap<String, String>,
         state: Vec<(String, String)>,
+    },
+    /// `actions/cache` saving what its main step was asked to cache.
+    CacheSave {
+        key: String,
+        version: String,
+        paths: Vec<String>,
+        exact_hit: bool,
     },
 }
 
@@ -383,6 +399,14 @@ impl<'a> Job<'a> {
             line: None,
             title: None,
         });
+    }
+
+    /// The home directory steps run with (the runner user's, in a VM).
+    pub(crate) fn step_home(&self) -> PathBuf {
+        self.user
+            .as_ref()
+            .map(|u| u.home.clone())
+            .unwrap_or_else(|| self.home.clone())
     }
 
     fn start_step(&mut self, name: &str, phase: StepPhase) -> usize {
@@ -603,7 +627,11 @@ impl<'a> Job<'a> {
         }
 
         self.github = self.github_context();
+        // `BASTE=true` tells steps (and `if: env.BASTE == 'true'`) that they
+        // run locally; on GitHub it's unset. Workflow and job env can override.
         self.env = Map::new();
+        self.env
+            .insert("BASTE".into(), Value::String("true".into()));
         let layers = [spec.workflow_env.clone(), spec.job_env.clone()];
         for layer in layers {
             let scope = self.dummy_scope();

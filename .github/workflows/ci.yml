@@ -109,6 +109,16 @@ jobs:
           ls -l /dev/kvm
       - name: Set up VM networking
         run: sudo "target/$TARGET/release/baste" setup-network --user "$USER" --slots 2
+      # Local runs only: keep Baste's Firecracker downloads and provisioned
+      # image between runs. Provisioning is most of this job's time in a
+      # nested VM on a Mac, and the image (a 20 GiB sparse file) is too big for
+      # GitHub's runners, so on GitHub the job builds it fresh as before.
+      - name: Cache the Firecracker image (local runs)
+        if: env.BASTE == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/baste/firecracker
+          key: firecracker-${{ runner.arch }}-${{ hashFiles('crates/baste/src/backend/provision.sh', 'crates/baste/src/backend/firecracker.rs') }}
       - name: Run a workflow in Firecracker VMs
         env:
           GITHUB_TOKEN: ${{ github.token }}
